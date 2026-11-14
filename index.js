@@ -2050,6 +2050,72 @@ require('dotenv').config();
     // READY
     // ============================================================
     
+    // ============================================================
+    // TRANSCRIPTS DE TICKETS
+    // ============================================================
+    async function crearTranscriptTicket(channel) {
+        const mensajes = [];
+        let before;
+        try {
+            while (true) {
+                const opciones = { limit: 100 };
+                if (before) opciones.before = before;
+                const lote = await channel.messages.fetch(opciones);
+                if (!lote.size) break;
+                mensajes.push(...lote.values());
+                before = lote.last().id;
+                if (lote.size < 100) break;
+            }
+            mensajes.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+            const lineas = [
+                'TRANSCRIPT DEL TICKET',
+                'Canal: #' + channel.name,
+                'ID del canal: ' + channel.id,
+                'Servidor: ' + (channel.guild?.name || 'Desconocido'),
+                'Generado: ' + new Date().toLocaleString('es-CL', { timeZone: 'America/Santiago' }),
+                'Mensajes: ' + mensajes.length,
+                '='.repeat(80),
+                ''
+            ];
+            for (const mensaje of mensajes) {
+                const fecha = new Date(mensaje.createdTimestamp).toLocaleString('es-CL', {
+                    timeZone: 'America/Santiago', year: 'numeric', month: '2-digit',
+                    day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+                    hour12: false
+                });
+                const autor = mensaje.author
+                    ? (mensaje.author.tag || mensaje.author.username) + ' (ID: ' + mensaje.author.id + ')'
+                    : 'Usuario desconocido';
+                lineas.push('[' + fecha + '] ' + autor);
+                lineas.push(mensaje.content || '(sin texto)');
+                for (const adjunto of mensaje.attachments.values()) {
+                    lineas.push('[Archivo adjunto: ' + adjunto.name + '] ' + adjunto.url);
+                }
+                for (const embed of mensaje.embeds) {
+                    if (embed.title) lineas.push('[Embed: ' + embed.title + ']');
+                    if (embed.description) lineas.push('[Descripción del embed: ' + embed.description + ']');
+                    if (embed.url) lineas.push('[Enlace del embed: ' + embed.url + ']');
+                }
+                for (const sticker of mensaje.stickers.values()) {
+                    lineas.push('[Sticker: ' + sticker.name + ']');
+                }
+                lineas.push('-'.repeat(80), '');
+            }
+            if (!mensajes.length) lineas.push('No se encontraron mensajes en el canal.');
+            const nombreSeguro = String(channel.name || 'ticket').replace(/[^a-z0-9-_]/gi, '-').slice(0, 60);
+            return new AttachmentBuilder(Buffer.from(lineas.join('\n'), 'utf8'), {
+                name: 'transcript-' + nombreSeguro + '.txt'
+            });
+        } catch (error) {
+            console.error('Error creando transcript del ticket ' + channel.id + ':', error);
+            const contenido = 'No se pudo generar el transcript completo.\nCanal: ' + channel.name +
+                '\nID: ' + channel.id + '\nError: ' + (error.message || String(error));
+            return new AttachmentBuilder(Buffer.from(contenido, 'utf8'), {
+                name: 'transcript-' + channel.id + '-ERROR.txt'
+            });
+        }
+    }
+
     client.once('ready', async function() {
     
         console.log('✅ Bot conectado como: ' + client.user.tag);
@@ -2784,8 +2850,10 @@ require('dotenv').config();
     
                 if (canalLogs) {
     
+                    const transcript = await crearTranscriptTicket(channel);
                     await canalLogs.send({
-                        embeds: [embedLog]
+                        embeds: [embedLog],
+                        files: [transcript]
                     });
     
                 }
@@ -4414,12 +4482,10 @@ require('dotenv').config();
     
                 if (canalLogs) {
     
+                    const transcript = await crearTranscriptTicket(channel);
                     await canalLogs.send({
-    
-                        embeds: [
-                            embedLog
-                        ]
-    
+                        embeds: [embedLog],
+                        files: [transcript]
                     });
     
                 }
