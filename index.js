@@ -3221,25 +3221,20 @@ require('dotenv').config();
                 }
     
                 const listaUsuarios = [];
-                const rolMiddlemanId = '1499596482322501802';
 
-                // Verifica en Discord que cada usuario siga teniendo el rol Middleman.
-                // Los usuarios demoteados o que ya no están en el servidor quedan fuera del ranking.
+                // Incluye a todos los usuarios con reseñas registradas,
+                // aunque ya no tengan actualmente el rol Middleman.
                 for (const [usuarioId, lista] of resenasBD.entries()) {
-                    const miembro = await interaction.guild.members.fetch(usuarioId).catch(() => null);
-                    if (!miembro || !miembro.roles.cache.has(rolMiddlemanId)) continue;
-    
-                        const total =
-                            lista.length;
-    
-                        const promedio =
-                            lista.reduce(
-                                function(acc, r) {
-                                    return acc + r.estrellas;
-                                },
-                                0
-                            ) / total;
-    
+                    const total = lista.length;
+                    if (total === 0) continue;
+
+                    const promedio = lista.reduce(
+                        function(acc, r) {
+                            return acc + r.estrellas;
+                        },
+                        0
+                    ) / total;
+
                     listaUsuarios.push({
                         usuarioId: usuarioId,
                         promedio: promedio,
@@ -3272,7 +3267,7 @@ require('dotenv').config();
     
                 if (listaUsuarios.length === 0) {
                     return interaction.reply({
-                        content: 'ℹ️ No hay usuarios con el rol Middleman que tengan reseñas registradas.'
+                        content: 'ℹ️ Aún no hay reseñas registradas en la base de datos.'
                     });
                 }
 
