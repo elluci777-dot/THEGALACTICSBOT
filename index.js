@@ -3175,7 +3175,7 @@ require('dotenv').config();
                             '⭐ Historial Global de Reseñas - ' +
                             usuario.username
                         )
-                        .setColor(0xF1C40F)
+                        .setColor(0xBF00FF)
                         .setThumbnail(
                             usuario.displayAvatarURL({
                                 dynamic: true
