@@ -3151,17 +3151,20 @@ require('dotenv').config();
                             r.tipoOrigen ||
                             '⭐ General';
     
+                        const autorResena = r.autorId
+                            ? '<@' + r.autorId + '>'
+                            : 'Registro histórico recuperado (autor no disponible)';
                         texto +=
                             '**' +
                             (i + 1) +
                             '.** [' +
                             tagOrigen +
-                            '] Por <@' +
-                            r.autorId +
-                            '> - ' +
+                            '] Por ' +
+                            autorResena +
+                            ' - ' +
                             '⭐'.repeat(r.estrellas) +
                             '\n> *' +
-                            r.comentario +
+                            (r.comentario || 'Detalle original no disponible.') +
                             '*\n\n';
     
                     });
@@ -3218,9 +3221,13 @@ require('dotenv').config();
                 }
     
                 const listaUsuarios = [];
-    
-                resenasBD.forEach(
-                    function(lista, usuarioId) {
+                const rolMiddlemanId = '1499596482322501802';
+
+                // Verifica en Discord que cada usuario siga teniendo el rol Middleman.
+                // Los usuarios demoteados o que ya no están en el servidor quedan fuera del ranking.
+                for (const [usuarioId, lista] of resenasBD.entries()) {
+                    const miembro = await interaction.guild.members.fetch(usuarioId).catch(() => null);
+                    if (!miembro || !miembro.roles.cache.has(rolMiddlemanId)) continue;
     
                         const total =
                             lista.length;
@@ -3233,14 +3240,12 @@ require('dotenv').config();
                                 0
                             ) / total;
     
-                        listaUsuarios.push({
-                            usuarioId: usuarioId,
-                            promedio: promedio,
-                            total: total
-                        });
-    
-                    }
-                );
+                    listaUsuarios.push({
+                        usuarioId: usuarioId,
+                        promedio: promedio,
+                        total: total
+                    });
+                }
     
                 listaUsuarios.sort(
                     function(a, b) {
@@ -3265,6 +3270,12 @@ require('dotenv').config();
                     }
                 );
     
+                if (listaUsuarios.length === 0) {
+                    return interaction.reply({
+                        content: 'ℹ️ No hay usuarios con el rol Middleman que tengan reseñas registradas.'
+                    });
+                }
+
                 const medallas =
                     ['🥇', '🥈', '🥉'];
     
@@ -3302,9 +3313,9 @@ require('dotenv').config();
                 const embedTop =
                     new EmbedBuilder()
                         .setTitle(
-                            '🏆 Top 10 Mejores Reseñados y Puntuaciones'
+                            '<a:lightbluepasdasrd:1570855097292820632> Top 10 Mejores Reseñados y Puntuaciones'
                         )
-                        .setColor(0xF1C40F)
+                        .setColor(0xBF00FF)
                         .setDescription(
                             descripcionTop
                         )
