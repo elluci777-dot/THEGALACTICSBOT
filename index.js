@@ -1587,6 +1587,7 @@ require('dotenv').config();
     // ============================================================
     const CANAL_POSTULACIONES_ACTIVAS = '1562599831204008007';
     const CANAL_LOGS_POSTULACIONES_ID = '1562622099745415258';
+    const USUARIO_DECISION_POSTULACIONES_ID = '1353069786975699004';
     const ROLE_POSTULAR_CUALQUIER_RANGO_ID = '1543766939833339990';
     const ARCHIVO_POSTULACIONES = path.join(__dirname, 'postulaciones.json');
     const ROLES_POSTULACION = {
@@ -2112,6 +2113,22 @@ require('dotenv').config();
             new ButtonBuilder().setCustomId(`postulacion:decision:rechazar:${p.id}`).setLabel('Rechazar').setEmoji('❌').setStyle(4)
         )];
     }
+
+    async function enviarPanelDecisionPostulacion(p) {
+        try {
+            const destinatario = await client.users.fetch(USUARIO_DECISION_POSTULACIONES_ID);
+            await destinatario.send({
+                content: `Nueva postulación pendiente · ${ROLES_POSTULACION[p.rango]?.nombre || p.rango}\nPostulante: <@${p.usuarioId}> · ID: ${p.id}`,
+                embeds: [crearEmbedRegistroPostulacion(p)],
+                components: filaDecisionPostulacion(p),
+                allowedMentions: { parse: [] }
+            });
+            return true;
+        } catch (error) {
+            console.error(`No se pudo enviar el panel de decisión de la postulación ${p.id} al usuario ${USUARIO_DECISION_POSTULACIONES_ID}:`, error.message);
+            return false;
+        }
+    }
     function crearPaginaPostulaciones(lista, rango, pagina = 0) {
         const totalPaginas = Math.max(1, Math.ceil(lista.length / 10));
         const actual = Math.max(0, Math.min(Number(pagina) || 0, totalPaginas - 1));
@@ -2533,21 +2550,12 @@ require('dotenv').config();
                     let enviadasDM = 0;
                     let fallidasDM = 0;
                     for (const postulacion of lista) {
-                        try {
-                            await user.send({
-                                content: `Panel de revisión de postulación · ${ROLES_POSTULACION[postulacion.rango].nombre}`,
-                                embeds: [crearEmbedRegistroPostulacion(postulacion)],
-                                components: filaDecisionPostulacion(postulacion),
-                                allowedMentions: { parse: [] }
-                            });
-                            enviadasDM++;
-                        } catch (error) {
-                            fallidasDM++;
-                        }
+                        if (await enviarPanelDecisionPostulacion(postulacion)) enviadasDM++;
+                        else fallidasDM++;
                     }
                     const pagina = crearPaginaPostulaciones(lista, rango, 0);
                     return interaction.reply({
-                        content: `Postulaciones pendientes: **${lista.length}** · Página **1/${pagina.totalPaginas}**.\nPaneles de decisión enviados por DM: **${enviadasDM}**.${fallidasDM ? ` No se pudieron enviar **${fallidasDM}** DM; revisa que tengas los mensajes privados habilitados.` : ''}`,
+                        content: `Postulaciones pendientes: **${lista.length}** · Página **1/${pagina.totalPaginas}**.\nPaneles enviados al responsable <@${USUARIO_DECISION_POSTULACIONES_ID}>: **${enviadasDM}**.${fallidasDM ? ` No se pudieron enviar **${fallidasDM}** paneles; revisa que el usuario tenga los mensajes privados habilitados.` : ''}`,
                         embeds: pagina.embeds,
                         components: pagina.components,
                         ephemeral: true
@@ -3641,8 +3649,9 @@ require('dotenv').config();
                 if (!p) return interaction.reply({ content: 'No se encontró esta postulación.', ephemeral: true });
                 const servidorDecision = guild || await client.guilds.fetch(p.guildId).catch(() => null);
                 if (!servidorDecision) return interaction.reply({ content: 'No pude encontrar el servidor de esta postulación.', ephemeral: true });
-                const actor = await servidorDecision.members.fetch(user.id).catch(() => null);
-                if (!esAdminPostulaciones(actor)) return interaction.reply({ content: '❌ Solo administración puede aceptar o rechazar postulaciones.', ephemeral: true });
+                if (user.id !== USUARIO_DECISION_POSTULACIONES_ID) {
+                    return interaction.reply({ content: '❌ Este panel de decisión está asignado al responsable autorizado de postulaciones.', ephemeral: true });
+                }
                 if (p.estado !== 'activa') return interaction.reply({ content: 'Esta postulación ya fue procesada.', ephemeral: true });
                 if (!['aceptar', 'rechazar'].includes(decision)) return interaction.reply({ content: 'Decisión no válida.', ephemeral: true });
 
@@ -3764,7 +3773,14 @@ require('dotenv').config();
                 postulaciones.push(p);
                 guardarPostulaciones();
                 await logPostulacion(guild, `Nueva postulación registrada: <@${user.id}> → ${ROLES_POSTULACION[p.rango].nombre}.`, p);
-                return interaction.update({ content: `✅ Tu postulación a **${ROLES_POSTULACION[p.rango].nombre}** fue enviada correctamente. La administración la revisará.`, components: [] });
+                const panelEnviado = await enviarPanelDecisionPostulacion(p);
+                const avisoPanel = panelEnviado
+                    ? ' El panel de decisión fue enviado al responsable de postulaciones.'
+                    : ' ⚠️ No se pudo entregar el panel de decisión; la administración deberá revisar los permisos de mensajes privados del responsable.';
+                return interaction.update({
+                    content: `✅ Tu postulación a **${ROLES_POSTULACION[p.rango].nombre}** fue enviada correctamente. La administración la revisará.${avisoPanel}`,
+                    components: []
+                });
             }
     
             if (customId.startsWith('modconfirm:') || customId.startsWith('modcancel:')) {
