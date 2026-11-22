@@ -1155,7 +1155,30 @@ require('dotenv').config();
     
     const ticketsBD = new Map();
     const resenasBD = new Map();
-    
+    const ticketsReclamadosBD = new Map();
+
+    // Contador histórico de tickets Middleman reclamados por usuario.
+    const ARCHIVO_TICKETS_RECLAMADOS = path.join(__dirname, 'tickets_reclamados.json');
+
+    function cargarTicketsReclamados() {
+        try {
+            if (!fs.existsSync(ARCHIVO_TICKETS_RECLAMADOS)) return;
+            const guardados = JSON.parse(fs.readFileSync(ARCHIVO_TICKETS_RECLAMADOS, 'utf8') || '{}');
+            for (const [usuarioId, cantidad] of Object.entries(guardados)) {
+                ticketsReclamadosBD.set(usuarioId, Math.max(0, Number(cantidad) || 0));
+            }
+            console.log('✅ Estadísticas de tickets reclamados cargadas.');
+        } catch (error) {
+            console.error('❌ No se pudieron cargar las estadísticas de tickets reclamados:', error);
+        }
+    }
+
+    function guardarTicketsReclamados() {
+        fs.writeFileSync(ARCHIVO_TICKETS_RECLAMADOS, JSON.stringify(Object.fromEntries(ticketsReclamadosBD.entries()), null, 2), 'utf8');
+    }
+
+    cargarTicketsReclamados();
+
     // Las reseñas se guardan en un JSON junto al index.js para sobrevivir reinicios.
     const ARCHIVO_RESENAS = path.join(__dirname, 'resenas.json');
     
@@ -2035,6 +2058,7 @@ require('dotenv').config();
             .slice(0, 5);
         return {
             total,
+            ticketsReclamados: ticketsReclamadosBD.get(usuarioId) || 0,
             promedio: total ? promedio.toFixed(2) : 'Sin calificaciones',
             detalle: ultimas.length
                 ? ultimas.map((r, i) => `${i + 1}. ${'⭐'.repeat(Math.max(0, Math.min(5, Number(r.estrellas) || 0)))} (${r.estrellas}/5) — ${String(r.comentario || 'Sin comentario').replace(/\s+/g, ' ').slice(0, 130)}`).join('\n')
@@ -2068,7 +2092,8 @@ require('dotenv').config();
         if (p.rango === 'moderador') {
             const stats = p.estadisticasMiddleman || obtenerEstadisticasMiddleman(p.usuarioId);
             embed.addFields(
-                { name: 'Tickets atendidos con reseña', value: bloqueCodigoPostulacion(stats.total), inline: true },
+                { name: 'Datos extra · Tickets reclamados', value: bloqueCodigoPostulacion(stats.ticketsReclamados), inline: true },
+                { name: 'Tickets con reseña', value: bloqueCodigoPostulacion(stats.total), inline: true },
                 { name: 'Promedio de calificación', value: bloqueCodigoPostulacion(stats.promedio), inline: true },
                 { name: 'Reseñas recibidas', value: bloqueCodigoPostulacion(stats.detalle), inline: false }
             );
@@ -2100,7 +2125,12 @@ require('dotenv').config();
                     { name: 'Postulante', value: `<@${p.usuarioId}>\n${bloqueCodigoPostulacion(p.usuarioNombre || 'Usuario')}`, inline: false },
                     { name: 'Estado', value: bloqueCodigoPostulacion(estado), inline: true },
                     { name: 'Fecha', value: bloqueCodigoPostulacion(p.fecha || 'No disponible'), inline: true },
-                    ...(stats ? [{ name: 'Tickets con reseña / Promedio', value: bloqueCodigoPostulacion(`${stats.total} / ${stats.promedio}`), inline: false }] : []),
+                    ...(stats ? [
+                        { name: 'Datos extra · Tickets reclamados', value: bloqueCodigoPostulacion(stats.ticketsReclamados), inline: true },
+                        { name: 'Tickets con reseña', value: bloqueCodigoPostulacion(stats.total), inline: true },
+                        { name: 'Promedio de calificación', value: bloqueCodigoPostulacion(stats.promedio), inline: true },
+                        { name: 'Reseñas recientes', value: bloqueCodigoPostulacion(stats.detalle), inline: false }
+                    ] : []),
                     { name: 'Respuesta', value: bloqueCodigoPostulacion(String(p.respuesta || 'Sin respuesta').slice(0, 180)), inline: false }
                 )
                 .setFooter({ text: `ID: ${p.id} · Página ${actual + 1}/${totalPaginas}` });
@@ -4378,6 +4408,17 @@ require('dotenv').config();
     
                     }
     
+                    // Registrar una sola vez cada ticket Middleman reclamado por un usuario con rol Middleman.
+                    if (datos.tipo === 'middleman' && esMiddleman) {
+                        ticketsReclamadosBD.set(user.id, (ticketsReclamadosBD.get(user.id) || 0) + 1);
+                        try {
+                            guardarTicketsReclamados();
+                        } catch (error) {
+                            ticketsReclamadosBD.set(user.id, Math.max(0, (ticketsReclamadosBD.get(user.id) || 1) - 1));
+                            console.error('❌ No se pudo guardar el contador de tickets reclamados:', error);
+                        }
+                    }
+
                     // =================================================
                     // ACTUALIZAR BOTÓN
                     // =================================================
