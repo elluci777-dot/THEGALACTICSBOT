@@ -2019,6 +2019,29 @@ require('dotenv').config();
         }
         return fila;
     }
+    function bloqueCodigoPostulacion(valor) {
+        const limpio = String(valor ?? 'No disponible').replace(/```/g, "'''").slice(0, 980);
+        return ````\n${limpio}\n````;
+    }
+
+    function obtenerEstadisticasMiddleman(usuarioId) {
+        const resenas = resenasBD.get(usuarioId) || [];
+        const total = resenas.length;
+        const promedio = total
+            ? resenas.reduce((suma, resena) => suma + (Number(resena.estrellas) || 0), 0) / total
+            : 0;
+        const ultimas = [...resenas]
+            .sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))
+            .slice(0, 5);
+        return {
+            total,
+            promedio: total ? promedio.toFixed(2) : 'Sin calificaciones',
+            detalle: ultimas.length
+                ? ultimas.map((r, i) => `${i + 1}. ${'⭐'.repeat(Math.max(0, Math.min(5, Number(r.estrellas) || 0)))} (${r.estrellas}/5) — ${String(r.comentario || 'Sin comentario').replace(/\s+/g, ' ').slice(0, 130)}`).join('\n')
+                : 'Todavía no tiene reseñas registradas.'
+        };
+    }
+
     function crearEmbedRegistroPostulacion(p, texto = null) {
         const estado = p.estado || 'activa';
         const colores = { activa: 0x3498DB, aceptada: 0x2ECC71, rechazada: 0xE74C3C };
@@ -2026,43 +2049,49 @@ require('dotenv').config();
         const embed = new EmbedBuilder()
             .setColor(colores[estado] || 0x3498DB)
             .setTitle('📋 Registro de postulación')
-            .setDescription(texto || 'Nueva solicitud recibida. La administración puede revisar la información y tomar una decisión.')
+            .setDescription(texto || 'Nueva solicitud recibida. Revisa los antecedentes del postulante.')
             .addFields(
-                { name: 'Postulante', value: `<@${p.usuarioId}> · \`${String(p.usuarioNombre || 'Usuario').slice(0, 80)}\``, inline: false },
-                { name: 'Rango solicitado', value: ROLES_POSTULACION[p.rango]?.nombre || p.rango, inline: true },
-                { name: 'Estado', value: nombresEstado[estado] || estado, inline: true },
-                { name: 'Fecha', value: String(p.fecha || 'No disponible').slice(0, 100), inline: false },
-                { name: 'Respuesta', value: String(p.respuesta || 'Sin respuesta').slice(0, 1024), inline: false }
-            )
-            .setFooter({ text: `ID: ${p.id}` })
-            .setTimestamp();
+                { name: 'Postulante', value: `<@${p.usuarioId}>\n${bloqueCodigoPostulacion(p.usuarioNombre || 'Usuario')}`, inline: false },
+                { name: 'Rango solicitado', value: bloqueCodigoPostulacion(ROLES_POSTULACION[p.rango]?.nombre || p.rango), inline: true },
+                { name: 'Estado', value: bloqueCodigoPostulacion(nombresEstado[estado] || estado), inline: true },
+                { name: 'Fecha', value: bloqueCodigoPostulacion(p.fecha || 'No disponible'), inline: false }
+            );
+        const respuesta = String(p.respuesta || 'Sin respuesta');
+        const partesRespuesta = respuesta.match(/[\s\S]{1,950}/g) || ['Sin respuesta'];
+        partesRespuesta.slice(0, 2).forEach((parte, indice) => {
+            embed.addFields({
+                name: partesRespuesta.length > 1 ? `Respuesta (${indice + 1}/${partesRespuesta.length})` : 'Respuesta',
+                value: bloqueCodigoPostulacion(parte),
+                inline: false
+            });
+        });
+        if (p.rango === 'moderador') {
+            const stats = p.estadisticasMiddleman || obtenerEstadisticasMiddleman(p.usuarioId);
+            embed.addFields(
+                { name: 'Tickets atendidos con reseña', value: bloqueCodigoPostulacion(stats.total), inline: true },
+                { name: 'Promedio de calificación', value: bloqueCodigoPostulacion(stats.promedio), inline: true },
+                { name: 'Reseñas recibidas', value: bloqueCodigoPostulacion(stats.detalle), inline: false }
+            );
+        }
         if (p.decididoPor) embed.addFields(
             { name: 'Decidido por', value: `<@${p.decididoPor}>`, inline: true },
-            { name: 'Fecha de decisión', value: String(p.fechaDecision || 'No disponible').slice(0, 100), inline: true }
+            { name: 'Fecha de decisión', value: bloqueCodigoPostulacion(p.fechaDecision || 'No disponible'), inline: true }
         );
+        embed.setFooter({ text: `ID: ${p.id}` }).setTimestamp();
         return embed;
     }
     function filaDecisionPostulacion(p) {
         if ((p.estado || 'activa') !== 'activa') return [];
         return [new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(`postulacion:decision:aceptar:${p.id}`).setLabel('Aceptar').setEmoji('✅').setStyle(3),
-            new ButtonBuilder().setCustomId(`postulacion:decision:rechazar:${p.id}`).setLabel('Rechazar').setEmoji('✖️').setStyle(4)
+            new ButtonBuilder().setCustomId(`postulacion:decision:rechazar:${p.id}`).setLabel('Rechazar').setEmoji('❌').setStyle(4)
         )];
     }
     function crearPaginaPostulaciones(lista, rango, pagina = 0) {
         const totalPaginas = Math.max(1, Math.ceil(lista.length / 10));
         const actual = Math.max(0, Math.min(Number(pagina) || 0, totalPaginas - 1));
         const embeds = lista.slice(actual * 10, actual * 10 + 10).map(p =>
-            new EmbedBuilder()
-                .setColor(ROLES_POSTULACION[p.rango]?.color || 0x3498DB)
-                .setTitle(`Postulación · ${ROLES_POSTULACION[p.rango]?.nombre || p.rango}`)
-                .addFields(
-                    { name: 'Postulante', value: `<@${p.usuarioId}> · \`${String(p.usuarioNombre || 'Usuario').slice(0, 80)}\``, inline: false },
-                    { name: 'Estado', value: ({ activa: 'Pendiente', aceptada: 'Aceptada', rechazada: 'Rechazada' })[p.estado || 'activa'], inline: true },
-                    { name: 'Fecha', value: String(p.fecha || 'No disponible').slice(0, 100), inline: true },
-                    { name: 'Respuesta', value: String(p.respuesta || 'Sin respuesta').slice(0, 1024), inline: false }
-                )
-                .setFooter({ text: `ID: ${p.id} · Página ${actual + 1}/${totalPaginas}` })
+            crearEmbedRegistroPostulacion(p).setFooter({ text: `ID: ${p.id} · Página ${actual + 1}/${totalPaginas}` })
         );
         const components = totalPaginas > 1 ? [new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(`postulacion:pagina:${rango}:${actual - 1}`).setLabel('Anterior').setEmoji('◀️').setStyle(2).setDisabled(actual === 0),
@@ -2075,7 +2104,7 @@ require('dotenv').config();
             const canal = await guild.channels.fetch(CANAL_LOGS_POSTULACIONES_ID).catch(() => null);
             if (!canal || !canal.isTextBased()) return;
             if (postulacion) {
-                await canal.send({ embeds: [crearEmbedRegistroPostulacion(postulacion, texto)], components: filaDecisionPostulacion(postulacion), allowedMentions: { parse: [] } });
+                await canal.send({ embeds: [crearEmbedRegistroPostulacion(postulacion, texto)], allowedMentions: { parse: [] } });
                 return;
             }
             const embed = new EmbedBuilder().setColor(0xF39C12).setTitle('📋 Registro de postulaciones').setDescription(texto).setTimestamp();
@@ -2459,9 +2488,24 @@ require('dotenv').config();
                     const rango = options.getString('rango', true);
                     const lista = postulaciones.filter(p => p.guildId === guild.id && p.rango === rango && p.estado === 'activa');
                     if (!lista.length) return interaction.reply({ content: `No hay postulaciones activas para ${ROLES_POSTULACION[rango].nombre}.`, ephemeral: true });
+                    let enviadasDM = 0;
+                    let fallidasDM = 0;
+                    for (const postulacion of lista) {
+                        try {
+                            await user.send({
+                                content: `Panel de revisión de postulación · ${ROLES_POSTULACION[postulacion.rango].nombre}`,
+                                embeds: [crearEmbedRegistroPostulacion(postulacion)],
+                                components: filaDecisionPostulacion(postulacion),
+                                allowedMentions: { parse: [] }
+                            });
+                            enviadasDM++;
+                        } catch (error) {
+                            fallidasDM++;
+                        }
+                    }
                     const pagina = crearPaginaPostulaciones(lista, rango, 0);
                     return interaction.reply({
-                        content: `Postulaciones pendientes: **${lista.length}** · Página **1/${pagina.totalPaginas}**`,
+                        content: `Postulaciones pendientes: **${lista.length}** · Página **1/${pagina.totalPaginas}**.\nPaneles de decisión enviados por DM: **${enviadasDM}**.${fallidasDM ? ` No se pudieron enviar **${fallidasDM}** DM; revisa que tengas los mensajes privados habilitados.` : ''}`,
                         embeds: pagina.embeds,
                         components: pagina.components,
                         ephemeral: true
@@ -3551,20 +3595,84 @@ require('dotenv').config();
 
             if (customId.startsWith('postulacion:decision:')) {
                 const [, , decision, id] = customId.split(':');
-                const actor = await guild.members.fetch(user.id).catch(() => null);
-                if (!esAdminPostulaciones(actor)) return interaction.reply({ content: '❌ Solo administración puede aceptar o rechazar postulaciones.', ephemeral: true });
-                const p = postulaciones.find(item => item.guildId === guild.id && item.id === id);
+                const p = postulaciones.find(item => item.id === id);
                 if (!p) return interaction.reply({ content: 'No se encontró esta postulación.', ephemeral: true });
+                const servidorDecision = guild || await client.guilds.fetch(p.guildId).catch(() => null);
+                if (!servidorDecision) return interaction.reply({ content: 'No pude encontrar el servidor de esta postulación.', ephemeral: true });
+                const actor = await servidorDecision.members.fetch(user.id).catch(() => null);
+                if (!esAdminPostulaciones(actor)) return interaction.reply({ content: '❌ Solo administración puede aceptar o rechazar postulaciones.', ephemeral: true });
                 if (p.estado !== 'activa') return interaction.reply({ content: 'Esta postulación ya fue procesada.', ephemeral: true });
                 if (!['aceptar', 'rechazar'].includes(decision)) return interaction.reply({ content: 'Decisión no válida.', ephemeral: true });
+
                 p.estado = decision === 'aceptar' ? 'aceptada' : 'rechazada';
                 p.decididoPor = user.id;
                 p.fechaDecision = formatearFecha(new Date());
                 guardarPostulaciones();
-                return interaction.update({
-                    embeds: [crearEmbedRegistroPostulacion(p, decision === 'aceptar' ? 'La administración **aceptó** esta postulación.' : 'La administración **rechazó** esta postulación.')],
+
+                await interaction.update({
+                    embeds: [crearEmbedRegistroPostulacion(p, decision === 'aceptar' ? 'La administración aceptó esta postulación.' : 'La administración rechazó esta postulación.')],
                     components: []
                 });
+
+                const postulante = await client.users.fetch(p.usuarioId).catch(() => null);
+                if (postulante) {
+                    if (decision === 'aceptar') {
+                        const esMiddleman = p.rango === 'middleman';
+                        const esModerador = p.rango === 'moderador';
+                        const emojiRango = esMiddleman
+                            ? '<:middleman:1534930961249341480>'
+                            : esModerador
+                                ? '<:moderador:1534930989355106385>'
+                                : '';
+                        const colorDM = esMiddleman ? 0x3498DB : esModerador ? 0x2ECC71 : (ROLES_POSTULACION[p.rango]?.color || 0x2ECC71);
+                        const embedDM = new EmbedBuilder()
+                            .setColor(colorDM)
+                            .setTitle('¡Felicidades! Has sido seleccionado')
+                            .setDescription(
+                                `Has sido seleccionado para **${ROLES_POSTULACION[p.rango]?.nombre || p.rango}** ${emojiRango}\n\n` +
+                                'Si tienes dudas, háblale a algún miembro del Staff, o consulta con Tu tio vixo o Guti.'
+                            )
+                            .setTimestamp();
+                        if (esModerador) {
+                            embedDM.addFields({
+                                name: 'Cómo seguir aportando como STAFF en TGZ',
+                                value: 'Si quieres seguir aportando como STAFF en TGZ, puedes revisar el archivo TXT adjunto.'
+                            });
+                            const recomendaciones = [
+                                '# RECOMENDACIONES PARA IR AVANZANDO Y APORTANDO COMO STAFF TGZ.',
+                                '',
+                                '1. Reclamar tickets de reporte, soporte y ayuda.',
+                                '',
+                                '2. Enviar cosas en #🧠︙steal-news como leaks, si hay admin o no (viendo el temporizador que pone Sammy en el juego), etc.',
+                                '',
+                                '3. Moderar e ir revisando los canales.',
+                                '',
+                                '4. Estar en VC para ver si hay peleas o insultos.',
+                                '',
+                                '5. Estar activo con los Middleman; si hacen algo incorrecto, corregirlos para que sigan aprendiendo.',
+                                '',
+                                '6. Ayudar a la gente que va entrando, dándoles la bienvenida para que se sientan acogidos.',
+                                '',
+                                '7. Revisar los canales. Por ejemplo, si alguien pone en #💬︙general “vendo brainrots”, indicarle amablemente que lo publique en #💰︙trades-y-ventas.'
+                            ].join('\n');
+                            const archivoTXT = new AttachmentBuilder(Buffer.from(recomendaciones, 'utf8'), { name: 'recomendaciones_staff_tgz.txt' });
+                            await postulante.send({ embeds: [embedDM], files: [archivoTXT] }).catch(error => console.error('No se pudo enviar el DM de aceptación:', error));
+                        } else {
+                            await postulante.send({ embeds: [embedDM] }).catch(error => console.error('No se pudo enviar el DM de aceptación:', error));
+                        }
+                    } else {
+                        const embedDM = new EmbedBuilder()
+                            .setColor(0xE74C3C)
+                            .setTitle('Resultado de tu postulación')
+                            .setDescription(
+                                `Gracias por tu interés en formar parte del Staff. En esta ocasión, tu postulación para **${ROLES_POSTULACION[p.rango]?.nombre || p.rango}** no fue seleccionada.\n\n` +
+                                'Puedes seguir aportando al servidor y volver a intentarlo cuando se habiliten nuevas postulaciones.'
+                            )
+                            .setTimestamp();
+                        await postulante.send({ embeds: [embedDM] }).catch(error => console.error('No se pudo enviar el DM de rechazo:', error));
+                    }
+                }
+                return;
             }
 
             if (customId === 'postulacion:iniciar') {
@@ -3608,6 +3716,9 @@ require('dotenv').config();
                 }
                 postulacionesPendientes.delete(token);
                 const p = { id: crypto.randomUUID().slice(0, 8).toUpperCase(), guildId: pending.guildId, usuarioId: pending.usuarioId, usuarioNombre: pending.usuarioNombre, rango: pending.rango, respuesta: pending.respuesta, fecha: formatearFecha(new Date()), estado: 'activa' };
+                if (pending.rango === 'moderador') {
+                    p.estadisticasMiddleman = obtenerEstadisticasMiddleman(pending.usuarioId);
+                }
                 postulaciones.push(p);
                 guardarPostulaciones();
                 await logPostulacion(guild, `Nueva postulación registrada: <@${user.id}> → ${ROLES_POSTULACION[p.rango].nombre}.`, p);
