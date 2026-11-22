@@ -2081,7 +2081,6 @@ require('dotenv').config();
             .addFields(
                 { name: 'Postulante', value: `<@${p.usuarioId}>\n${bloqueCodigoPostulacion(p.usuarioNombre || 'Usuario')}`, inline: false },
                 { name: 'Rango solicitado', value: bloqueCodigoPostulacion(ROLES_POSTULACION[p.rango]?.nombre || p.rango), inline: true },
-                { name: 'Estado', value: bloqueCodigoPostulacion(nombresEstado[estado] || estado), inline: true },
                 { name: 'Fecha', value: bloqueCodigoPostulacion(p.fecha || 'No disponible'), inline: false }
             );
         const respuesta = String(p.respuesta || 'Sin respuesta');
