@@ -2021,7 +2021,7 @@ require('dotenv').config();
     }
     function bloqueCodigoPostulacion(valor) {
         const limpio = String(valor ?? 'No disponible').replace(/```/g, "'''").slice(0, 980);
-        return ````\n${limpio}\n````;
+        return '```\\n' + limpio + '\\n```';
     }
 
     function obtenerEstadisticasMiddleman(usuarioId) {
@@ -2090,9 +2090,21 @@ require('dotenv').config();
     function crearPaginaPostulaciones(lista, rango, pagina = 0) {
         const totalPaginas = Math.max(1, Math.ceil(lista.length / 10));
         const actual = Math.max(0, Math.min(Number(pagina) || 0, totalPaginas - 1));
-        const embeds = lista.slice(actual * 10, actual * 10 + 10).map(p =>
-            crearEmbedRegistroPostulacion(p).setFooter({ text: `ID: ${p.id} · Página ${actual + 1}/${totalPaginas}` })
-        );
+        const embeds = lista.slice(actual * 10, actual * 10 + 10).map(p => {
+            const estado = ({ activa: 'Pendiente', aceptada: 'Aceptada', rechazada: 'Rechazada' })[p.estado || 'activa'];
+            const stats = p.rango === 'moderador' ? (p.estadisticasMiddleman || obtenerEstadisticasMiddleman(p.usuarioId)) : null;
+            return new EmbedBuilder()
+                .setColor(ROLES_POSTULACION[p.rango]?.color || 0x3498DB)
+                .setTitle(`Postulación · ${ROLES_POSTULACION[p.rango]?.nombre || p.rango}`)
+                .addFields(
+                    { name: 'Postulante', value: `<@${p.usuarioId}>\\n${bloqueCodigoPostulacion(p.usuarioNombre || 'Usuario')}`, inline: false },
+                    { name: 'Estado', value: bloqueCodigoPostulacion(estado), inline: true },
+                    { name: 'Fecha', value: bloqueCodigoPostulacion(p.fecha || 'No disponible'), inline: true },
+                    ...(stats ? [{ name: 'Tickets con reseña / Promedio', value: bloqueCodigoPostulacion(`${stats.total} / ${stats.promedio}`), inline: false }] : []),
+                    { name: 'Respuesta', value: bloqueCodigoPostulacion(String(p.respuesta || 'Sin respuesta').slice(0, 180)), inline: false }
+                )
+                .setFooter({ text: `ID: ${p.id} · Página ${actual + 1}/${totalPaginas}` });
+        });
         const components = totalPaginas > 1 ? [new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(`postulacion:pagina:${rango}:${actual - 1}`).setLabel('Anterior').setEmoji('◀️').setStyle(2).setDisabled(actual === 0),
             new ButtonBuilder().setCustomId(`postulacion:pagina:${rango}:${actual + 1}`).setLabel('Siguiente').setEmoji('▶️').setStyle(2).setDisabled(actual >= totalPaginas - 1)
@@ -3643,7 +3655,7 @@ require('dotenv').config();
                                 '',
                                 '1. Reclamar tickets de reporte, soporte y ayuda.',
                                 '',
-                                '2. Enviar cosas en #🧠︙steal-news como leaks, si hay admin o no (viendo el temporizador que pone Sammy en el juego), etc.',
+                                '2. Enviar cosas en ⁠:brain:︙steal-news como leaks, si hay admin o no (viendo el temporizador que pone Sammy en el juego), etc.',
                                 '',
                                 '3. Moderar e ir revisando los canales.',
                                 '',
