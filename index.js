@@ -2019,17 +2019,66 @@ require('dotenv').config();
         }
         return fila;
     }
+    function crearEmbedRegistroPostulacion(p, texto = null) {
+        const estado = p.estado || 'activa';
+        const colores = { activa: 0x3498DB, aceptada: 0x2ECC71, rechazada: 0xE74C3C };
+        const nombresEstado = { activa: 'Pendiente de revisión', aceptada: 'Aceptada', rechazada: 'Rechazada' };
+        const embed = new EmbedBuilder()
+            .setColor(colores[estado] || 0x3498DB)
+            .setTitle('📋 Registro de postulación')
+            .setDescription(texto || 'Nueva solicitud recibida. La administración puede revisar la información y tomar una decisión.')
+            .addFields(
+                { name: 'Postulante', value: `<@${p.usuarioId}> · \`${String(p.usuarioNombre || 'Usuario').slice(0, 80)}\``, inline: false },
+                { name: 'Rango solicitado', value: ROLES_POSTULACION[p.rango]?.nombre || p.rango, inline: true },
+                { name: 'Estado', value: nombresEstado[estado] || estado, inline: true },
+                { name: 'Fecha', value: String(p.fecha || 'No disponible').slice(0, 100), inline: false },
+                { name: 'Respuesta', value: String(p.respuesta || 'Sin respuesta').slice(0, 1024), inline: false }
+            )
+            .setFooter({ text: `ID: ${p.id}` })
+            .setTimestamp();
+        if (p.decididoPor) embed.addFields(
+            { name: 'Decidido por', value: `<@${p.decididoPor}>`, inline: true },
+            { name: 'Fecha de decisión', value: String(p.fechaDecision || 'No disponible').slice(0, 100), inline: true }
+        );
+        return embed;
+    }
+    function filaDecisionPostulacion(p) {
+        if ((p.estado || 'activa') !== 'activa') return [];
+        return [new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`postulacion:decision:aceptar:${p.id}`).setLabel('Aceptar').setEmoji('✅').setStyle(3),
+            new ButtonBuilder().setCustomId(`postulacion:decision:rechazar:${p.id}`).setLabel('Rechazar').setEmoji('✖️').setStyle(4)
+        )];
+    }
+    function crearPaginaPostulaciones(lista, rango, pagina = 0) {
+        const totalPaginas = Math.max(1, Math.ceil(lista.length / 10));
+        const actual = Math.max(0, Math.min(Number(pagina) || 0, totalPaginas - 1));
+        const embeds = lista.slice(actual * 10, actual * 10 + 10).map(p =>
+            new EmbedBuilder()
+                .setColor(ROLES_POSTULACION[p.rango]?.color || 0x3498DB)
+                .setTitle(`Postulación · ${ROLES_POSTULACION[p.rango]?.nombre || p.rango}`)
+                .addFields(
+                    { name: 'Postulante', value: `<@${p.usuarioId}> · \`${String(p.usuarioNombre || 'Usuario').slice(0, 80)}\``, inline: false },
+                    { name: 'Estado', value: ({ activa: 'Pendiente', aceptada: 'Aceptada', rechazada: 'Rechazada' })[p.estado || 'activa'], inline: true },
+                    { name: 'Fecha', value: String(p.fecha || 'No disponible').slice(0, 100), inline: true },
+                    { name: 'Respuesta', value: String(p.respuesta || 'Sin respuesta').slice(0, 1024), inline: false }
+                )
+                .setFooter({ text: `ID: ${p.id} · Página ${actual + 1}/${totalPaginas}` })
+        );
+        const components = totalPaginas > 1 ? [new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`postulacion:pagina:${rango}:${actual - 1}`).setLabel('Anterior').setEmoji('◀️').setStyle(2).setDisabled(actual === 0),
+            new ButtonBuilder().setCustomId(`postulacion:pagina:${rango}:${actual + 1}`).setLabel('Siguiente').setEmoji('▶️').setStyle(2).setDisabled(actual >= totalPaginas - 1)
+        )] : [];
+        return { embeds, components, pagina: actual, totalPaginas };
+    }
     async function logPostulacion(guild, texto, postulacion = null) {
         try {
             const canal = await guild.channels.fetch(CANAL_LOGS_POSTULACIONES_ID).catch(() => null);
             if (!canal || !canal.isTextBased()) return;
-            const embed = new EmbedBuilder().setColor(0xF39C12).setTitle('📋 Registro de postulaciones')
-                .setDescription(texto).setTimestamp();
-            if (postulacion) embed.addFields(
-                { name: 'Postulante', value: `<@${postulacion.usuarioId}>`, inline: true },
-                { name: 'Rango solicitado', value: ROLES_POSTULACION[postulacion.rango]?.nombre || postulacion.rango, inline: true },
-                { name: 'Respuesta', value: String(postulacion.respuesta || 'Pendiente').slice(0, 1024), inline: false }
-            );
+            if (postulacion) {
+                await canal.send({ embeds: [crearEmbedRegistroPostulacion(postulacion, texto)], components: filaDecisionPostulacion(postulacion), allowedMentions: { parse: [] } });
+                return;
+            }
+            const embed = new EmbedBuilder().setColor(0xF39C12).setTitle('📋 Registro de postulaciones').setDescription(texto).setTimestamp();
             await canal.send({ embeds: [embed], allowedMentions: { parse: [] } });
         } catch (e) { console.error('Error enviando log de postulación:', e.message); }
     }
@@ -2410,13 +2459,13 @@ require('dotenv').config();
                     const rango = options.getString('rango', true);
                     const lista = postulaciones.filter(p => p.guildId === guild.id && p.rango === rango && p.estado === 'activa');
                     if (!lista.length) return interaction.reply({ content: `No hay postulaciones activas para ${ROLES_POSTULACION[rango].nombre}.`, ephemeral: true });
-                    const embeds = [];
-                    for (const p of lista) embeds.push(new EmbedBuilder().setColor(ROLES_POSTULACION[rango].color).setTitle(`Postulación ${ROLES_POSTULACION[rango].nombre}`).addFields(
-                        { name: 'Postulante', value: `<@${p.usuarioId}> (${p.usuarioNombre})`, inline: false },
-                        { name: 'Fecha', value: p.fecha, inline: true },
-                        { name: '¿Por qué te quieres postular?', value: String(p.respuesta || 'Sin respuesta').slice(0, 1024), inline: false }
-                    ).setFooter({ text: `ID: ${p.id}` }));
-                    return interaction.reply({ content: `Postulaciones activas: **${lista.length}**`, embeds: embeds.slice(0, 10), ephemeral: true });
+                    const pagina = crearPaginaPostulaciones(lista, rango, 0);
+                    return interaction.reply({
+                        content: `Postulaciones pendientes: **${lista.length}** · Página **1/${pagina.totalPaginas}**`,
+                        embeds: pagina.embeds,
+                        components: pagina.components,
+                        ephemeral: true
+                    });
                 }
                 if (commandName === 'clear_postulaciones_activas') {
                     if (!esAdminPostulaciones(actor)) return interaction.reply({ content: '❌ Solo administrador, co-owner o dueño puede borrar las postulaciones.', ephemeral: true });
@@ -2430,7 +2479,7 @@ require('dotenv').config();
             if (commandName === 'cmds') {
                 const sub = options.getSubcommand(true);
                 if (sub !== 'postulaciones') return interaction.reply({ content: 'Usa `/cmds postulaciones`.', ephemeral: true });
-                return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Comandos de postulaciones').setColor(0xF39C12).setDescription('`/panel_postulaciones` — publica el panel con el GIF de Halloween.\n`/añadir_rangos rango` — añade un rango al stock mediante opciones.\n`/eliminar_rangos rango` — elimina un rango del stock mediante opciones.\n`/postulaciones_activas rango` — consulta las postulaciones activas y sus respuestas; úsalo en el canal designado.\n`/clear_postulaciones_activas` — elimina todas las postulaciones registradas y deja el contador en 0; solo administración.\n\nPor defecto, los miembros avanzan un rango por jerarquía. Quienes tengan el rol especial configurado pueden postularse a cualquier rango habilitado.')], ephemeral: true });
+                return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Comandos de postulaciones').setColor(0xF39C12).setDescription('`/panel_postulaciones` — publica el panel con el GIF de Halloween.\n`/añadir_rangos rango` — añade un rango al stock mediante opciones.\n`/eliminar_rangos rango` — elimina un rango del stock mediante opciones.\n`/postulaciones_activas rango` — consulta postulaciones pendientes en páginas de hasta 10; la administración puede aceptar o rechazar desde el registro.\n`/clear_postulaciones_activas` — elimina todas las postulaciones registradas y deja el contador en 0; solo administración.\n\nPor defecto, los miembros avanzan un rango por jerarquía. Quienes tengan el rol especial configurado pueden postularse a cualquier rango habilitado.')], ephemeral: true });
             }
     
             const nombresModeracion = ['advertir','sancion','historial','kick','ban','timeout','quitar_sancion','caso','limpiar','comandos'];
@@ -3334,7 +3383,8 @@ require('dotenv').config();
             if (!rangosPermitidosPara(member).includes(rango)) return interaction.reply({ content: 'Tu rango cambió o ya no cumples los requisitos para postularte.', ephemeral: true });
             const token = crypto.randomUUID();
             postulacionesPendientes.set(token, { guildId: interaction.guildId, usuarioId: interaction.user.id, usuarioNombre: interaction.user.tag, rango, respuesta, creado: Date.now() });
-            await logPostulacion(interaction.guild, `El usuario <@${interaction.user.id}> respondió la pregunta de su postulación a ${ROLES_POSTULACION[rango].nombre}.`, { usuarioId: interaction.user.id, usuarioNombre: interaction.user.tag, rango, respuesta });
+
+
             const fila = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId(`postulacion:confirmar:${token}`).setLabel('Enviar respuestas').setStyle(3),
                 new ButtonBuilder().setCustomId(`postulacion:editar:${token}`).setLabel('Volver a responder').setStyle(1),
@@ -3485,6 +3535,38 @@ require('dotenv').config();
                 if (accion === 'volver') return interaction.update({ content: 'Cancelación descartada.', components: [] });
             }
     
+            if (customId.startsWith('postulacion:pagina:')) {
+                const [, , rango, paginaTexto] = customId.split(':');
+                const actor = await guild.members.fetch(user.id).catch(() => null);
+                if (!esAdminPostulaciones(actor)) return interaction.reply({ content: '❌ Solo administración puede consultar postulaciones.', ephemeral: true });
+                const lista = postulaciones.filter(p => p.guildId === guild.id && p.rango === rango && p.estado === 'activa');
+                if (!lista.length) return interaction.update({ content: 'Ya no hay postulaciones pendientes para este rango.', embeds: [], components: [] });
+                const pagina = crearPaginaPostulaciones(lista, rango, Number(paginaTexto));
+                return interaction.update({
+                    content: `Postulaciones pendientes: **${lista.length}** · Página **${pagina.pagina + 1}/${pagina.totalPaginas}**`,
+                    embeds: pagina.embeds,
+                    components: pagina.components
+                });
+            }
+
+            if (customId.startsWith('postulacion:decision:')) {
+                const [, , decision, id] = customId.split(':');
+                const actor = await guild.members.fetch(user.id).catch(() => null);
+                if (!esAdminPostulaciones(actor)) return interaction.reply({ content: '❌ Solo administración puede aceptar o rechazar postulaciones.', ephemeral: true });
+                const p = postulaciones.find(item => item.guildId === guild.id && item.id === id);
+                if (!p) return interaction.reply({ content: 'No se encontró esta postulación.', ephemeral: true });
+                if (p.estado !== 'activa') return interaction.reply({ content: 'Esta postulación ya fue procesada.', ephemeral: true });
+                if (!['aceptar', 'rechazar'].includes(decision)) return interaction.reply({ content: 'Decisión no válida.', ephemeral: true });
+                p.estado = decision === 'aceptar' ? 'aceptada' : 'rechazada';
+                p.decididoPor = user.id;
+                p.fechaDecision = formatearFecha(new Date());
+                guardarPostulaciones();
+                return interaction.update({
+                    embeds: [crearEmbedRegistroPostulacion(p, decision === 'aceptar' ? 'La administración **aceptó** esta postulación.' : 'La administración **rechazó** esta postulación.')],
+                    components: []
+                });
+            }
+
             if (customId === 'postulacion:iniciar') {
                 if (!rangosPostulacion.length) return interaction.reply({ content: 'Por ahora no hay rangos habilitados para postulaciones. Consulta con la administración.', ephemeral: true });
                 const freshMember = await guild.members.fetch(user.id).catch(() => null);
@@ -3514,7 +3596,8 @@ require('dotenv').config();
                 if (pending.usuarioId !== user.id) return interaction.reply({ content: 'Esta confirmación no te pertenece.', ephemeral: true });
                 if (accion === 'cancelar') {
                     postulacionesPendientes.delete(token);
-                    await logPostulacion(guild, `El usuario <@${user.id}> canceló una postulación a ${ROLES_POSTULACION[pending.rango].nombre}.`);
+
+
                     return interaction.update({ content: 'Postulación cancelada. No se guardó.', components: [] });
                 }
                 if (accion === 'editar') {
