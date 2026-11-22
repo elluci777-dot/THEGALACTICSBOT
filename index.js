@@ -2171,7 +2171,7 @@ require('dotenv').config();
             const canal = await guild.channels.fetch(CANAL_LOGS_POSTULACIONES_ID).catch(() => null);
             if (!canal || !canal.isTextBased()) return;
             if (postulacion) {
-                await canal.send({ embeds: [crearEmbedRegistroPostulacion(postulacion, texto, true, 0x9B59B6)], allowedMentions: { parse: [] } });
+                await canal.send({ embeds: [crearEmbedRegistroPostulacion(postulacion, texto, true, ROLES_POSTULACION[postulacion.rango]?.color ?? 0x9B59B6)], allowedMentions: { parse: [] } });
                 return;
             }
             const embed = new EmbedBuilder().setColor(0xF39C12).setTitle('📋 Registro de postulaciones').setDescription(texto).setTimestamp();
