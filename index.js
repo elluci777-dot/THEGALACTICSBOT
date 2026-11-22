@@ -2103,8 +2103,8 @@ require('dotenv').config();
                 `PROMEDIO: ${stats.promedio}`
             ].join('\n');
             embed.addFields(
-                { name: 'Datos extra · Actividad como Middleman', value: resumenResenas, inline: false },
-                { name: 'Últimas reseñas recibidas', value: stats.detalle, inline: false }
+                { name: 'Datos extra · Actividad como Middleman', value: bloqueCodigoPostulacion(resumenResenas), inline: false },
+                { name: 'Últimas reseñas recibidas', value: bloqueCodigoPostulacion(stats.detalle), inline: false }
             );
         }
         if (p.decididoPor) embed.addFields(
