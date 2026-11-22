@@ -2021,7 +2021,7 @@ require('dotenv').config();
     }
     function bloqueCodigoPostulacion(valor) {
         const limpio = String(valor ?? 'No disponible').replace(/```/g, "'''").slice(0, 980);
-        return '```\\n' + limpio + '\\n```';
+        return '```\n' + limpio + '\n```';
     }
 
     function obtenerEstadisticasMiddleman(usuarioId) {
@@ -2097,7 +2097,7 @@ require('dotenv').config();
                 .setColor(ROLES_POSTULACION[p.rango]?.color || 0x3498DB)
                 .setTitle(`Postulación · ${ROLES_POSTULACION[p.rango]?.nombre || p.rango}`)
                 .addFields(
-                    { name: 'Postulante', value: `<@${p.usuarioId}>\\n${bloqueCodigoPostulacion(p.usuarioNombre || 'Usuario')}`, inline: false },
+                    { name: 'Postulante', value: `<@${p.usuarioId}>\n${bloqueCodigoPostulacion(p.usuarioNombre || 'Usuario')}`, inline: false },
                     { name: 'Estado', value: bloqueCodigoPostulacion(estado), inline: true },
                     { name: 'Fecha', value: bloqueCodigoPostulacion(p.fecha || 'No disponible'), inline: true },
                     ...(stats ? [{ name: 'Tickets con reseña / Promedio', value: bloqueCodigoPostulacion(`${stats.total} / ${stats.promedio}`), inline: false }] : []),
