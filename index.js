@@ -2067,7 +2067,7 @@ require('dotenv').config();
         };
     }
 
-    function crearEmbedRegistroPostulacion(p, texto = null) {
+    function crearEmbedRegistroPostulacion(p, texto = null, incluirDatosExtra = true) {
         const estado = p.estado || 'activa';
         const colores = { activa: 0x3498DB, aceptada: 0x2ECC71, rechazada: 0xE74C3C };
         const nombresEstado = { activa: 'Pendiente de revisión', aceptada: 'Aceptada', rechazada: 'Rechazada' };
@@ -2090,13 +2090,16 @@ require('dotenv').config();
                 inline: false
             });
         });
-        if (p.rango === 'moderador') {
+        if (incluirDatosExtra && p.rango === 'moderador') {
             const stats = p.estadisticasMiddleman || obtenerEstadisticasMiddleman(p.usuarioId);
+            const resumenResenas = [
+                `Tickets reclamados: ${stats.ticketsReclamados}`,
+                `Tickets con reseña: ${stats.total}`,
+                `Promedio: ${stats.promedio}`
+            ].join('\\n');
             embed.addFields(
-                { name: 'Datos extra · Tickets reclamados', value: bloqueCodigoPostulacion(stats.ticketsReclamados), inline: true },
-                { name: 'Tickets con reseña', value: bloqueCodigoPostulacion(stats.total), inline: true },
-                { name: 'Promedio de calificación', value: bloqueCodigoPostulacion(stats.promedio), inline: true },
-                { name: 'Reseñas recibidas', value: bloqueCodigoPostulacion(stats.detalle), inline: false }
+                { name: '📊 Datos extra · Actividad como Middleman', value: bloqueCodigoPostulacion(resumenResenas), inline: false },
+                { name: '⭐ Últimas reseñas recibidas', value: bloqueCodigoPostulacion(stats.detalle), inline: false }
             );
         }
         if (p.decididoPor) embed.addFields(
@@ -3661,7 +3664,7 @@ require('dotenv').config();
                 guardarPostulaciones();
 
                 await interaction.update({
-                    embeds: [crearEmbedRegistroPostulacion(p, decision === 'aceptar' ? 'La administración aceptó esta postulación.' : 'La administración rechazó esta postulación.')],
+                    embeds: [crearEmbedRegistroPostulacion(p, decision === 'aceptar' ? 'La administración aceptó esta postulación.' : 'La administración rechazó esta postulación.', false)],
                     components: []
                 });
 
