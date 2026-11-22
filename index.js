@@ -2060,6 +2060,9 @@ require('dotenv').config();
         return {
             total,
             ticketsReclamados: ticketsReclamadosBD.get(usuarioId) || 0,
+            resenasAlta: resenas.filter(r => Number(r.estrellas) >= 4).length,
+            resenasMedia: resenas.filter(r => Number(r.estrellas) === 3).length,
+            resenasBaja: resenas.filter(r => Number(r.estrellas) <= 2).length,
             promedio: total ? promedio.toFixed(2) : 'Sin calificaciones',
             detalle: ultimas.length
                 ? ultimas.map((r, i) => `${i + 1}. ${'⭐'.repeat(Math.max(0, Math.min(5, Number(r.estrellas) || 0)))} (${r.estrellas}/5) — ${String(r.comentario || 'Sin comentario').replace(/\s+/g, ' ').slice(0, 130)}`).join('\n')
@@ -2067,12 +2070,12 @@ require('dotenv').config();
         };
     }
 
-    function crearEmbedRegistroPostulacion(p, texto = null, incluirDatosExtra = true) {
+    function crearEmbedRegistroPostulacion(p, texto = null, incluirDatosExtra = true, colorOverride = null) {
         const estado = p.estado || 'activa';
         const colores = { activa: 0x3498DB, aceptada: 0x2ECC71, rechazada: 0xE74C3C };
         const nombresEstado = { activa: 'Pendiente de revisión', aceptada: 'Aceptada', rechazada: 'Rechazada' };
         const embed = new EmbedBuilder()
-            .setColor(colores[estado] || 0x3498DB)
+            .setColor(colorOverride ?? colores[estado] ?? 0x3498DB)
             .setTitle('📋 Registro de postulación')
             .setDescription(texto || 'Nueva solicitud recibida. Revisa los antecedentes del postulante.')
             .addFields(
@@ -2094,12 +2097,14 @@ require('dotenv').config();
             const stats = p.estadisticasMiddleman || obtenerEstadisticasMiddleman(p.usuarioId);
             const resumenResenas = [
                 `Tickets reclamados: ${stats.ticketsReclamados}`,
-                `Tickets con reseña: ${stats.total}`,
-                `Promedio: ${stats.promedio}`
-            ].join('\\n');
+                `Tickets con reseña ALTA: ${stats.resenasAlta ?? 0}`,
+                `Tickets con reseña MEDIA: ${stats.resenasMedia ?? 0}`,
+                `Tickets con reseña BAJA: ${stats.resenasBaja ?? 0}`,
+                `PROMEDIO: ${stats.promedio}`
+            ].join('\n');
             embed.addFields(
-                { name: '📊 Datos extra · Actividad como Middleman', value: bloqueCodigoPostulacion(resumenResenas), inline: false },
-                { name: '⭐ Últimas reseñas recibidas', value: bloqueCodigoPostulacion(stats.detalle), inline: false }
+                { name: 'Datos extra · Actividad como Middleman', value: resumenResenas, inline: false },
+                { name: 'Últimas reseñas recibidas', value: stats.detalle, inline: false }
             );
         }
         if (p.decididoPor) embed.addFields(
@@ -2166,7 +2171,7 @@ require('dotenv').config();
             const canal = await guild.channels.fetch(CANAL_LOGS_POSTULACIONES_ID).catch(() => null);
             if (!canal || !canal.isTextBased()) return;
             if (postulacion) {
-                await canal.send({ embeds: [crearEmbedRegistroPostulacion(postulacion, texto)], allowedMentions: { parse: [] } });
+                await canal.send({ embeds: [crearEmbedRegistroPostulacion(postulacion, texto, true, 0x9B59B6)], allowedMentions: { parse: [] } });
                 return;
             }
             const embed = new EmbedBuilder().setColor(0xF39C12).setTitle('📋 Registro de postulaciones').setDescription(texto).setTimestamp();
