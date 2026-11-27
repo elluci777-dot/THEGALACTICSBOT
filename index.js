@@ -2629,7 +2629,7 @@ require('dotenv').config();
                             { name: 'palabra_9', description: 'Novena palabra', type: ApplicationCommandOptionType.String, required: false, max_length: 50 },
                             { name: 'palabra_10', description: 'Décima palabra', type: ApplicationCommandOptionType.String, required: false, max_length: 50 }
                         ]
-                    }],
+                    }]},
                 ...definicionesComandosModeracion()
     
             ]);
