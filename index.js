@@ -214,6 +214,19 @@ require('dotenv').config();
 
     async function iniciarCodigo(codigo) {
         if (!codigo || codigo.estado !== 'pendiente') return false;
+
+        const guild = await client.guilds.fetch(codigo.guildId).catch(() => null);
+        const canal = guild ? await guild.channels.fetch(codigo.canalId).catch(() => null) : null;
+        if (!canal || !canal.isTextBased() || !canal.permissionOverwrites) {
+            throw new Error('No se encontró el canal del código o no se pueden modificar sus permisos.');
+        }
+
+        // Abre el canal para que @everyone pueda participar al comenzar el código.
+        await canal.permissionOverwrites.edit(codigo.guildId, {
+            SendMessages: true,
+            AddReactions: true
+        }, { reason: 'Inicio de un nuevo código; canal abierto para participantes.' });
+
         codigo.estado = 'activo';
         codigo.iniciadoEn = Date.now();
         codigo.indice = 0;
