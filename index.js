@@ -109,6 +109,164 @@ require('dotenv').config();
                 .setStyle(estilos[s.color] || 3)
         );
     }
+
+    // ============================================================
+    // SISTEMA DE CÓDIGOS POR PARTES
+    // ============================================================
+    const ARCHIVO_CODIGOS = path.join(__dirname, 'codigos.json');
+    let codigos = [];
+    const temporizadoresCodigos = new Map();
+
+    try {
+        if (fs.existsSync(ARCHIVO_CODIGOS)) {
+            const datosCodigos = JSON.parse(fs.readFileSync(ARCHIVO_CODIGOS, 'utf8') || '[]');
+            codigos = Array.isArray(datosCodigos) ? datosCodigos : [];
+        }
+    } catch (error) {
+        console.error('No se pudo cargar codigos.json:', error);
+    }
+
+    function guardarCodigos() {
+        fs.writeFileSync(ARCHIVO_CODIGOS, JSON.stringify(codigos, null, 2), 'utf8');
+    }
+
+    function normalizarCodigo(valor) {
+        return String(valor || '').normalize('NFKC').trim().replace(/\\s+/g, ' ').toLocaleUpperCase('es-CL');
+    }
+
+    function embedCodigo(codigo) {
+        const iniciado = codigo.estado === 'activo';
+        return new EmbedBuilder()
+            .setColor(iniciado ? 0x2ECC71 : 0xF1C40F)
+            .setTitle('🔐 Código por partes')
+            .setDescription(
+                `**Organizador:** <@${codigo.creadorId}>\\n` +
+                `**Canal:** <#${codigo.canalId}>\\n` +
+                `**Partes:** ${codigo.palabras.length}\\n\\n` +
+                (iniciado
+                    ? 'El código ya está en marcha. Une todas las palabras y envía la frase completa.'
+                    : 'Pulsa **Iniciar código** para comenzar. El bot enviará una palabra cada 3 segundos.')
+            )
+            .setFooter({ text: `The Galactics • Código ${codigo.id}` })
+            .setTimestamp(new Date(codigo.creado));
+    }
+
+    function filaIniciarCodigo(codigo) {
+        return new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`codigo:iniciar:${codigo.id}`)
+                .setLabel('Iniciar código')
+                .setEmoji('▶️')
+                .setStyle(3)
+                .setDisabled(codigo.estado !== 'pendiente')
+        );
+    }
+
+    async function enviarSiguienteParteCodigo(codigo) {
+        if (!codigo || codigo.estado !== 'activo') return;
+        if (codigo.indice >= codigo.palabras.length) return;
+
+        const guild = await client.guilds.fetch(codigo.guildId).catch(() => null);
+        const canal = guild ? await guild.channels.fetch(codigo.canalId).catch(() => null) : null;
+        if (!canal || !canal.isTextBased() || !canal.send) {
+            codigo.estado = 'error';
+            guardarCodigos();
+            temporizadoresCodigos.delete(codigo.id);
+            return;
+        }
+
+        try {
+            const mensaje = await canal.send(codigo.palabras[codigo.indice]);
+            codigo.mensajesBot = Array.isArray(codigo.mensajesBot) ? codigo.mensajesBot : [];
+            codigo.mensajesBot.push(mensaje.id);
+            codigo.indice += 1;
+            codigo.ultimoEnvioEn = Date.now();
+            guardarCodigos();
+
+            if (codigo.indice < codigo.palabras.length) {
+                const timer = setTimeout(() => {
+                    enviarSiguienteParteCodigo(codigo).catch(error => console.error('Error enviando parte del código:', error));
+                }, 3000);
+                temporizadoresCodigos.set(codigo.id, timer);
+            }
+        } catch (error) {
+            console.error('No se pudo enviar una parte del código:', error);
+            codigo.estado = 'error';
+            guardarCodigos();
+            temporizadoresCodigos.delete(codigo.id);
+        }
+    }
+
+    async function iniciarCodigo(codigo) {
+        if (!codigo || codigo.estado !== 'pendiente') return false;
+        codigo.estado = 'activo';
+        codigo.iniciadoEn = Date.now();
+        codigo.indice = 0;
+        codigo.mensajesBot = [];
+        guardarCodigos();
+        await enviarSiguienteParteCodigo(codigo);
+        return codigo.estado === 'activo';
+    }
+
+    async function finalizarCodigoConGanador(codigo, mensajeGanador) {
+        if (!codigo || codigo.estado !== 'activo') return false;
+        codigo.estado = 'ganado';
+        codigo.ganadorId = mensajeGanador.author.id;
+        codigo.ganadorMensajeId = mensajeGanador.id;
+        codigo.ganadoEn = Date.now();
+        const timer = temporizadoresCodigos.get(codigo.id);
+        if (timer) clearTimeout(timer);
+        temporizadoresCodigos.delete(codigo.id);
+        guardarCodigos();
+
+        const canal = mensajeGanador.channel;
+        // Cierra el canal para @everyone, sin borrar el canal ni quitar acceso al staff.
+        await canal.permissionOverwrites.edit(codigo.guildId, {
+            SendMessages: false,
+            AddReactions: false
+        }, { reason: 'Código completado; canal bloqueado automáticamente.' }).catch(error => {
+            console.error('No se pudo bloquear el canal del código:', error);
+        });
+
+        // Se conservan los mensajes del bot y el mensaje ganador. El resto de mensajes
+        // publicados desde el inicio del código se eliminan en lotes de hasta 100.
+        const inicio = Number(codigo.iniciadoEn || 0);
+        let antesDe = undefined;
+        let continuar = true;
+        while (continuar) {
+            const lote = await canal.messages.fetch({ limit: 100, ...(antesDe ? { before: antesDe } : {}) }).catch(() => null);
+            if (!lote || lote.size === 0) break;
+            const mensajesEliminar = lote.filter(m =>
+                m.createdTimestamp >= inicio &&
+                !m.author.bot &&
+                m.id !== mensajeGanador.id
+            );
+            if (mensajesEliminar.size) {
+                await canal.bulkDelete(mensajesEliminar, true).catch(error => {
+                    console.error('No se pudieron limpiar todos los mensajes del código:', error);
+                });
+            }
+            const masAntiguo = lote.last();
+            if (!masAntiguo || masAntiguo.createdTimestamp < inicio || lote.size < 100) continuar = false;
+            else antesDe = masAntiguo.id;
+        }
+
+        guardarCodigos();
+        await canal.send(`🏆 <@${mensajeGanador.author.id}> encontró el código primero. ¡Ganador!`).catch(() => null);
+        return true;
+    }
+
+    async function reanudarCodigosActivos() {
+        for (const codigo of codigos) {
+            if (codigo.estado !== 'activo' || codigo.indice >= codigo.palabras.length) continue;
+            const transcurrido = Date.now() - Number(codigo.ultimoEnvioEn || codigo.iniciadoEn || Date.now());
+            const espera = Math.max(0, 3000 - transcurrido);
+            const timer = setTimeout(() => {
+                enviarSiguienteParteCodigo(codigo).catch(error => console.error('Error reanudando código:', error));
+            }, espera);
+            temporizadoresCodigos.set(codigo.id, timer);
+        }
+    }
     function filaPanelSorteo(s) {
         return new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(`sorteo:reclamado:${s.id}`).setLabel('Reclamado').setStyle(3),
@@ -2450,8 +2608,24 @@ require('dotenv').config();
                             ]},
                             { name: 'imagen', description: 'Adjunta una imagen para el sorteo', type: ApplicationCommandOptionType.Attachment, required: false }
                         ]
-                    }]
-                },
+                    }, {
+                        type: ApplicationCommandOptionType.Subcommand,
+                        name: 'codigo',
+                        description: 'Crear un código que se revela palabra por palabra',
+                        options: [
+                            { name: 'cantidad_palabras', description: 'Cantidad de palabras del código (2 a 10)', type: ApplicationCommandOptionType.Integer, required: true, min_value: 2, max_value: 10 },
+                            { name: 'palabra_1', description: 'Primera palabra', type: ApplicationCommandOptionType.String, required: true, max_length: 50 },
+                            { name: 'palabra_2', description: 'Segunda palabra', type: ApplicationCommandOptionType.String, required: true, max_length: 50 },
+                            { name: 'palabra_3', description: 'Tercera palabra', type: ApplicationCommandOptionType.String, required: false, max_length: 50 },
+                            { name: 'palabra_4', description: 'Cuarta palabra', type: ApplicationCommandOptionType.String, required: false, max_length: 50 },
+                            { name: 'palabra_5', description: 'Quinta palabra', type: ApplicationCommandOptionType.String, required: false, max_length: 50 },
+                            { name: 'palabra_6', description: 'Sexta palabra', type: ApplicationCommandOptionType.String, required: false, max_length: 50 },
+                            { name: 'palabra_7', description: 'Séptima palabra', type: ApplicationCommandOptionType.String, required: false, max_length: 50 },
+                            { name: 'palabra_8', description: 'Octava palabra', type: ApplicationCommandOptionType.String, required: false, max_length: 50 },
+                            { name: 'palabra_9', description: 'Novena palabra', type: ApplicationCommandOptionType.String, required: false, max_length: 50 },
+                            { name: 'palabra_10', description: 'Décima palabra', type: ApplicationCommandOptionType.String, required: false, max_length: 50 }
+                        ]
+                    }],
                 ...definicionesComandosModeracion()
     
             ]);
@@ -2460,6 +2634,7 @@ require('dotenv').config();
             setInterval(() => procesarVencimientosBan().catch(err => console.error('Error revisando baneos temporales:', err)), 60 * 1000);
             procesarVencimientosBan().catch(err => console.error('Error inicial revisando baneos temporales:', err));
             for (const sorteo of sorteos) programarSorteo(sorteo);
+            await reanudarCodigosActivos();
     
         } catch (err) {
     
@@ -2482,6 +2657,57 @@ require('dotenv').config();
     
             const commandName = interaction.commandName;
             tgManagerCommandUsage[commandName] = (tgManagerCommandUsage[commandName] || 0) + 1;
+            if (commandName === 'crear' && interaction.options.getSubcommand() === 'codigo') {
+                const cantidad = interaction.options.getInteger('cantidad_palabras', true);
+                const palabras = [];
+                for (let i = 1; i <= cantidad; i++) {
+                    const palabra = interaction.options.getString(`palabra_${i}`);
+                    if (!palabra || !palabra.trim() || /\\s/.test(palabra.trim())) {
+                        return interaction.reply({ content: `❌ Debes completar **palabra_${i}** con una sola palabra, sin espacios.`, ephemeral: true });
+                    }
+                    palabras.push(palabra.trim());
+                }
+                if (palabras.some(p => p.length > 50)) {
+                    return interaction.reply({ content: '❌ Cada palabra puede tener como máximo 50 caracteres.', ephemeral: true });
+                }
+                const canalDestino = interaction.channel;
+                if (!canalDestino || !canalDestino.isTextBased() || !canalDestino.send || !interaction.guild) {
+                    return interaction.reply({ content: '❌ Usa este comando dentro de un canal de texto de un servidor.', ephemeral: true });
+                }
+                const codigoEnCanal = codigos.find(c =>
+                    c.guildId === interaction.guildId &&
+                    c.canalId === canalDestino.id &&
+                    ['pendiente', 'activo'].includes(c.estado)
+                );
+                if (codigoEnCanal) {
+                    return interaction.reply({ content: '⚠️ Ya existe un código pendiente o activo en este canal. Termínalo antes de crear otro.', ephemeral: true });
+                }
+
+                await interaction.deferReply({ ephemeral: true });
+                const codigo = {
+                    id: require('crypto').randomUUID().slice(0, 10),
+                    guildId: interaction.guildId,
+                    canalId: canalDestino.id,
+                    creadorId: interaction.user.id,
+                    palabras,
+                    estado: 'pendiente',
+                    creado: Date.now(),
+                    indice: 0,
+                    mensajesBot: []
+                };
+                codigos.push(codigo);
+                guardarCodigos();
+
+                try {
+                    await canalDestino.send({ embeds: [embedCodigo(codigo)], components: [filaIniciarCodigo(codigo)] });
+                    return interaction.editReply(`✅ Código creado con **${cantidad} palabras**. Cuando estés listo, pulsa **Iniciar código** en el panel del canal.`);
+                } catch (error) {
+                    codigos = codigos.filter(c => c.id !== codigo.id);
+                    guardarCodigos();
+                    return interaction.editReply('❌ No pude publicar el panel. Revisa mis permisos en este canal.');
+                }
+            }
+
             if (commandName === 'crear' && interaction.options.getSubcommand() === 'sorteo') {
                 const opcionesSorteo = interaction.options;
                 const servidorSorteo = interaction.guild;
@@ -3561,6 +3787,24 @@ require('dotenv').config();
             const channel = interaction.channel;
             const member = interaction.member;
     
+            if (customId.startsWith('codigo:iniciar:')) {
+                const codigoId = customId.split(':')[2];
+                const codigo = codigos.find(c => c.id === codigoId);
+                if (!codigo) return interaction.reply({ content: 'Este código ya no está disponible.', ephemeral: true });
+                if (codigo.creadorId !== user.id) {
+                    return interaction.reply({ content: '❌ Solo quien creó este código puede iniciarlo.', ephemeral: true });
+                }
+                if (codigo.estado !== 'pendiente') {
+                    return interaction.reply({ content: 'Este código ya fue iniciado o procesado.', ephemeral: true });
+                }
+                await interaction.update({
+                    embeds: [embedCodigo({ ...codigo, estado: 'activo' })],
+                    components: []
+                });
+                await iniciarCodigo(codigo);
+                return;
+            }
+
             if (customId.startsWith('sorteo:')) {
                 const [, accion, sorteoId] = customId.split(':');
                 const s = sorteos.find(x => x.id === sorteoId);
@@ -4789,6 +5033,18 @@ require('dotenv').config();
     // COMANDOS DE MODERACIÓN CON PREFIJO "."
     // ============================================================
     client.on('messageCreate', async (message) => {
+        if (message.guild && !message.author.bot) {
+            const codigoActivo = codigos.find(c =>
+                c.guildId === message.guild.id &&
+                c.canalId === message.channel.id &&
+                c.estado === 'activo' &&
+                c.indice >= c.palabras.length
+            );
+            if (codigoActivo && normalizarCodigo(message.content) === normalizarCodigo(codigoActivo.palabras.join(' '))) {
+                await finalizarCodigoConGanador(codigoActivo, message);
+                return;
+            }
+        }
         if (message.guild && !message.author.bot && message.content.trim().toLowerCase() === 'claim') {
             const s = sorteos.find(x => x.guildId === message.guild.id && x.canalId === message.channel.id && x.estado === 'finalizado' && x.ganadorId === message.author.id && !x.reclamado);
             if (s) {
