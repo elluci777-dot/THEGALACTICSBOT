@@ -131,7 +131,7 @@ require('dotenv').config();
     }
 
     function normalizarCodigo(valor) {
-        return String(valor || '').normalize('NFKC').trim().replace(/\\s+/g, ' ').toLocaleUpperCase('es-CL');
+        return String(valor || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleUpperCase('es-CL');
     }
 
     function embedCodigo(codigo) {
@@ -140,9 +140,9 @@ require('dotenv').config();
             .setColor(iniciado ? 0x2ECC71 : 0xF1C40F)
             .setTitle('🔐 Código por partes')
             .setDescription(
-                `**Organizador:** <@${codigo.creadorId}>\\n` +
-                `**Canal:** <#${codigo.canalId}>\\n` +
-                `**Partes:** ${codigo.palabras.length}\\n\\n` +
+                `**Organizador:** <@${codigo.creadorId}>\n` +
+                `**Canal:** <#${codigo.canalId}>\n` +
+                `**Partes:** ${codigo.palabras.length}\n\n` +
                 (iniciado
                     ? 'El código ya está en marcha. Une todas las palabras y envía la frase completa.'
                     : 'Pulsa **Iniciar código** para comenzar. El bot enviará una palabra cada 3 segundos.')
@@ -2179,7 +2179,7 @@ require('dotenv').config();
             embeds: [new EmbedBuilder()
                 .setColor(color)
                 .setTitle('🎃 Postulaciones | The Galactics')
-                .setDescription('¿Quieres crecer dentro del equipo? Inicia tu postulación desde el botón de abajo.\\n\\nEl sistema solo mostrará los rangos disponibles según tu rango actual y el stock habilitado por la administración.')
+                .setDescription('¿Quieres crecer dentro del equipo? Inicia tu postulación desde el botón de abajo.\n\nEl sistema solo mostrará los rangos disponibles según tu rango actual y el stock habilitado por la administración.')
                 .setImage(GIF_NUEVO)
                 .setFooter({ text: 'The Galactics • Sistema oficial de postulaciones' })],
             components: [new ActionRowBuilder().addComponents(
@@ -2336,14 +2336,14 @@ require('dotenv').config();
         } catch (e) { console.error('Error enviando log de postulación:', e.message); }
     }
     function textoPostulacion(p) {
-        return `Postulante: <@${p.usuarioId}> (${p.usuarioNombre})\\nRango solicitado: ${ROLES_POSTULACION[p.rango]?.nombre || p.rango}\\nFecha: ${p.fecha}\\nEstado: ${p.estado}\\n¿Por qué te quieres postular?:\\n${p.respuesta || '(sin respuesta)'}\\n${'-'.repeat(50)}\\n`;
+        return `Postulante: <@${p.usuarioId}> (${p.usuarioNombre})\nRango solicitado: ${ROLES_POSTULACION[p.rango]?.nombre || p.rango}\nFecha: ${p.fecha}\nEstado: ${p.estado}\n¿Por qué te quieres postular?:\n${p.respuesta || '(sin respuesta)'}\n${'-'.repeat(50)}\n`;
     }
     async function enviarPostulacionesTXT(interaction, rango) {
         const lista = postulaciones.filter(p => p.guildId === interaction.guildId && p.rango === rango);
-        const postulantes = lista.length ? lista.map(p => `${p.usuarioNombre} (<@${p.usuarioId}>)\\n¿Por qué se quiere postular?: ${p.respuesta}\\nFecha: ${p.fecha}\\n`).join('\\n') : '';
-        const contenido = `POSTULANTES:\\n\\n${postulantes}\\n\\n${'_'.repeat(90)}\\n\\n` +
-            `${ROLES_POSTULACION[rango].nombre.toUpperCase()} (elegidos)\\n\\n\\n${'_'.repeat(90)}\\n\\n` +
-            `NO ELEGIDOS (${rango})\\n\\n\\n${'_'.repeat(90)}\\n`;
+        const postulantes = lista.length ? lista.map(p => `${p.usuarioNombre} (<@${p.usuarioId}>)\n¿Por qué se quiere postular?: ${p.respuesta}\nFecha: ${p.fecha}\n`).join('\n') : '';
+        const contenido = `POSTULANTES:\n\n${postulantes}\n\n${'_'.repeat(90)}\n\n` +
+            `${ROLES_POSTULACION[rango].nombre.toUpperCase()} (elegidos)\n\n\n${'_'.repeat(90)}\n\n` +
+            `NO ELEGIDOS (${rango})\n\n\n${'_'.repeat(90)}\n`;
         const adjunto = new AttachmentBuilder(Buffer.from(contenido, 'utf8'), { name: 'TXT RESULTADOS.txt' });
         return interaction.reply({ content: `📄 Resultados de postulaciones para **${ROLES_POSTULACION[rango].nombre}** (${lista.length}).`, files: [adjunto], ephemeral: true });
     }
@@ -2662,10 +2662,15 @@ require('dotenv').config();
                 const palabras = [];
                 for (let i = 1; i <= cantidad; i++) {
                     const palabra = interaction.options.getString(`palabra_${i}`);
-                    if (!palabra || !palabra.trim() || /\\s/.test(palabra.trim())) {
+                    if (!palabra || !palabra.trim() || /\s/.test(palabra.trim())) {
                         return interaction.reply({ content: `❌ Debes completar **palabra_${i}** con una sola palabra, sin espacios.`, ephemeral: true });
                     }
                     palabras.push(palabra.trim());
+                }
+                for (let i = cantidad + 1; i <= 10; i++) {
+                    if (interaction.options.getString(`palabra_${i}`)) {
+                        return interaction.reply({ content: `❌ Seleccionaste ${cantidad} palabras, así que no debes completar **palabra_${i}** ni las siguientes.`, ephemeral: true });
+                    }
                 }
                 if (palabras.some(p => p.length > 50)) {
                     return interaction.reply({ content: '❌ Cada palabra puede tener como máximo 50 caracteres.', ephemeral: true });
