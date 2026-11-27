@@ -3862,7 +3862,17 @@ require('dotenv').config();
                 }
                 await interaction.update({ content: '✅ Código iniciado.', embeds: [], components: [] });
                 const canalCodigo = await client.channels.fetch(codigo.canalId).catch(() => null);
-                if (canalCodigo?.isTextBased()) await canalCodigo.send('**El código es...**');
+                if (!canalCodigo?.isTextBased()) {
+                    codigo.estado = 'error';
+                    guardarCodigos();
+                    return;
+                }
+                await canalCodigo.send({
+                    content: `🔐 **Código iniciado por <@${codigo.creadorId}>**\n-# **Cómo jugar:** espera a que se envíen todas las partes y responde con el código completo, todo junto y sin espacios. ¡La primera persona en acertar gana!`,
+                    allowedMentions: { users: [codigo.creadorId] }
+                });
+                await canalCodigo.send('**El código es...**');
+                await new Promise(resolve => setTimeout(resolve, 3000));
                 await iniciarCodigo(codigo);
                 return;
             }
@@ -5102,7 +5112,7 @@ require('dotenv').config();
                 c.estado === 'activo' &&
                 c.indice >= c.palabras.length
             );
-            if (codigoActivo && normalizarCodigo(message.content) === normalizarCodigo(codigoActivo.palabras.join(' '))) {
+            if (codigoActivo && normalizarCodigo(message.content) === normalizarCodigo(codigoActivo.palabras.join(''))) {
                 await finalizarCodigoConGanador(codigoActivo, message);
                 return;
             }
