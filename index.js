@@ -241,7 +241,11 @@ require('dotenv').config();
                 !m.author.bot &&
                 m.id !== mensajeGanador.id
             );
-            if (mensajesEliminar.size) {
+            if (mensajesEliminar.size === 1) {
+                await mensajesEliminar.first().delete().catch(error => {
+                    console.error('No se pudo eliminar un mensaje del código:', error);
+                });
+            } else if (mensajesEliminar.size > 1) {
                 await canal.bulkDelete(mensajesEliminar, true).catch(error => {
                     console.error('No se pudieron limpiar todos los mensajes del código:', error);
                 });
