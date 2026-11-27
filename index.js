@@ -2708,7 +2708,7 @@ require('dotenv').config();
                 guardarCodigos();
 
                 try {
-                    await canalDestino.send({ embeds: [embedCodigo(codigo)], components: [filaIniciarCodigo(codigo)] });
+                    await canalDestino.send({ content: '**Código preparado.** Pulsa **Iniciar código** cuando quieras comenzar.', components: [filaIniciarCodigo(codigo)] });
                     return interaction.editReply(`✅ Código creado con **${cantidad} palabras**. Cuando estés listo, pulsa **Iniciar código** en el panel del canal.`);
                 } catch (error) {
                     codigos = codigos.filter(c => c.id !== codigo.id);
@@ -3807,7 +3807,8 @@ require('dotenv').config();
                     return interaction.reply({ content: 'Este código ya fue iniciado o procesado.', ephemeral: true });
                 }
                 await interaction.update({
-                    embeds: [embedCodigo({ ...codigo, estado: 'activo' })],
+                    content: '**El código es...**',
+                    embeds: [],
                     components: []
                 });
                 await iniciarCodigo(codigo);
