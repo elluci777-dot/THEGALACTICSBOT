@@ -138,7 +138,7 @@ require('dotenv').config();
         const completadas = (codigo.palabras || []).filter(p => String(p || '').trim()).length;
         return new EmbedBuilder()
             .setColor(0x9B59B6)
-            .setTitle('🔐 Crear código')
+            .setTitle('Crear código')
             .setDescription(`Configura las **${codigo.palabras.length} partes** de tu código.\n\n**Completadas:** ${completadas}/${codigo.palabras.length}\nSelecciona cada parte para escribir su contenido.`)
             .setFooter({ text: 'The Galactics • Configuración de código' });
     }
@@ -151,14 +151,13 @@ require('dotenv').config();
                 label: `Parte ${i + 1}`,
                 description: palabra ? 'Completada • Pulsa para editar' : 'Pendiente de completar',
                 value: String(i + 1),
-                emoji: palabra ? '✅' : '✏️'
             })));
         const filas = [new ActionRowBuilder().addComponents(menu)];
         const completo = codigo.palabras.every(p => String(p || '').trim());
         if (completo) {
             filas.push(new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`codigo:iniciar:${codigo.id}`).setLabel('Iniciar').setEmoji('▶️').setStyle(3),
-                new ButtonBuilder().setCustomId(`codigo:cancelar:${codigo.id}`).setLabel('Cancelar').setEmoji('✖️').setStyle(4)
+                new ButtonBuilder().setCustomId(`codigo:iniciar:${codigo.id}`).setLabel('Iniciar').setStyle(3),
+                new ButtonBuilder().setCustomId(`codigo:cancelar:${codigo.id}`).setLabel('Cancelar').setStyle(4)
             ));
         }
         return filas;
@@ -2702,7 +2701,7 @@ require('dotenv').config();
                     c.estado === 'activo'
                 );
                 if (codigoActivo) {
-                    return interaction.reply({ content: '⚠️ Ya hay un código en curso en este canal. Espera a que termine antes de crear otro.', ephemeral: true });
+                    return interaction.reply({ content: 'Ya hay un código en curso en este canal. Espera a que termine antes de crear otro.', ephemeral: true });
                 }
                 const codigo = {
                     id: require('crypto').randomUUID().slice(0, 10),
@@ -2726,14 +2725,14 @@ require('dotenv').config();
 
             if (commandName === 'delete' && interaction.options.getSubcommand() === 'code') {
                 if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
-                    return interaction.reply({ content: '❌ Necesitas permisos de administrador para borrar todos los códigos.', ephemeral: true });
+                    return interaction.reply({ content: 'Necesitas permisos de administrador para borrar todos los códigos.', ephemeral: true });
                 }
                 for (const timer of temporizadoresCodigos.values()) clearTimeout(timer);
                 temporizadoresCodigos.clear();
                 const cantidadEliminada = codigos.length;
                 codigos = [];
                 guardarCodigos();
-                return interaction.reply({ content: `✅ Se eliminaron **${cantidadEliminada}** códigos guardados.`, ephemeral: true });
+                return interaction.reply({ content: `Se eliminaron **${cantidadEliminada}** códigos guardados.`, ephemeral: true });
             }
 
             if (commandName === 'crear' && interaction.options.getSubcommand() === 'sorteo') {
@@ -3849,7 +3848,7 @@ require('dotenv').config();
                 if (codigo.estado !== 'pendiente') return interaction.reply({ content: 'Este código ya no se puede cancelar.', ephemeral: true });
                 codigos = codigos.filter(c => c.id !== codigoId);
                 guardarCodigos();
-                return interaction.update({ content: '❌ Configuración del código cancelada.', embeds: [], components: [] });
+                return interaction.update({ content: 'Configuración del código cancelada.', embeds: [], components: [] });
             }
 
             if (customId.startsWith('codigo:iniciar:')) {
@@ -3860,7 +3859,7 @@ require('dotenv').config();
                 if (codigo.estado !== 'pendiente' || !codigo.palabras.every(p => String(p || '').trim())) {
                     return interaction.reply({ content: 'Completa todas las partes antes de iniciar.', ephemeral: true });
                 }
-                await interaction.update({ content: '✅ Código iniciado.', embeds: [], components: [] });
+                await interaction.update({ content: 'Código iniciado.', embeds: [], components: [] });
                 const canalCodigo = await client.channels.fetch(codigo.canalId).catch(() => null);
                 if (!canalCodigo?.isTextBased()) {
                     codigo.estado = 'error';
@@ -3868,7 +3867,7 @@ require('dotenv').config();
                     return;
                 }
                 await canalCodigo.send({
-                    content: `🔐 **Código iniciado por <@${codigo.creadorId}>**\n-# **Cómo jugar:** espera a que se envíen todas las partes y responde con el código completo, todo junto y sin espacios. ¡La primera persona en acertar gana!`,
+                    content: `**Código iniciado por <@${codigo.creadorId}>**\n-# **Cómo jugar:** espera a que se envíen todas las partes y responde con el código completo, todo junto y sin espacios. ¡La primera persona en acertar gana!`,
                     allowedMentions: { users: [codigo.creadorId] }
                 });
                 await canalCodigo.send('**El código es...**');
