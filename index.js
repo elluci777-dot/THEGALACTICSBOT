@@ -82,7 +82,7 @@ require('dotenv').config();
     }
     function embedSorteo(s) {
         const e = new EmbedBuilder()
-            .setColor(colorSorteo(s.color))
+            .setColor(0xB30609)
             .setTitle(`🎉 ${s.titulo}`)
             .setDescription(`**Organizado por:** <@${s.hostId}>\n\nPulsa el botón para participar.\n\n**Participantes:** ${s.participantes.length}\n**Finaliza:** <t:${Math.floor(s.termina / 1000)}:R>`)
             .setFooter({ text: `The Galactics • Sorteo ${s.id}` })
@@ -137,7 +137,7 @@ require('dotenv').config();
     function embedCodigo(codigo) {
         const completadas = (codigo.palabras || []).filter(p => String(p || '').trim()).length;
         return new EmbedBuilder()
-            .setColor(0x9B59B6)
+            .setColor(0xB30609)
             .setTitle('Crear código')
             .setDescription(`Configura las **${codigo.palabras.length} partes** de tu código.\n\n**Completadas:** ${completadas}/${codigo.palabras.length}\nSelecciona cada parte para escribir su contenido.`)
             .setFooter({ text: 'The Galactics • Configuración de código' });
@@ -328,7 +328,7 @@ require('dotenv').config();
             guardarSorteos();
     
             const resultado = new EmbedBuilder()
-                .setColor(colorSorteo(s.color))
+                .setColor(0xB30609)
                 .setTitle('🏆 ¡Sorteo finalizado!')
                 .setDescription(`¡Felicidades <@${ganadorId}>! Has ganado **${s.titulo}**.\n\nEscribe **claim** en este canal para reclamar tu premio.`)
                 .setTimestamp();
@@ -338,7 +338,7 @@ require('dotenv').config();
             const ganador = await client.users.fetch(ganadorId).catch(() => null);
             if (ganador) {
                 const dm = new EmbedBuilder()
-                    .setColor(colorSorteo(s.color))
+                    .setColor(0xB30609)
                     .setTitle('🎉 ¡Felicitaciones!')
                     .setDescription(`¡Enhorabuena! Has ganado el sorteo **${s.titulo}** en **${guild.name}**.\n\nDirígete a <#${s.canalId}> y escribe **claim** para reclamar tu premio.`)
                     .setImage(GIF_NUEVO)
@@ -351,7 +351,7 @@ require('dotenv').config();
         const host = await client.users.fetch(s.creadorId).catch(() => null);
         if (host) {
             const panel = new EmbedBuilder()
-                .setColor(0xF1C40F)
+                .setColor(0xB30609)
                 .setTitle('Panel de sorteo')
                 .setDescription(s.ganadorId
                     ? `<@${s.ganadorId}> ha ganado **${s.titulo}**.\nGestiona el resultado con los botones.`
@@ -856,7 +856,7 @@ require('dotenv').config();
     function crearMenuReglasEmbed(color = 0x5865F2) {
     
         return new EmbedBuilder()
-            .setColor(color)
+            .setColor(0xB30609)
     
             .setTitle(
                 'Reglamento del servidor'
@@ -885,7 +885,7 @@ require('dotenv').config();
     function crearReglasGeneralesEmbed(color = 0x5865F2) {
     
         return new EmbedBuilder()
-            .setColor(color)
+            .setColor(0xB30609)
     
             .setTitle(
                 'Reglas en General'
@@ -971,7 +971,7 @@ require('dotenv').config();
     function crearReglasMiddlemanEmbed(color = 0x5865F2) {
     
         return new EmbedBuilder()
-            .setColor(color)
+            .setColor(0xB30609)
     
             .setTitle(
                 'Reglas Middleman'
@@ -1014,7 +1014,7 @@ require('dotenv').config();
     
     function crearReglasSancionesEmbed(color = 0x5865F2) {
         return new EmbedBuilder()
-            .setColor(color)
+            .setColor(0xB30609)
             .setTitle('Reglas de sanciones')
             .setDescription(`
     **1. Pruebas y contexto**
@@ -1550,7 +1550,7 @@ require('dotenv').config();
     function embedCaso(caso) {
         return new EmbedBuilder()
             .setTitle(`Caso ${caso.id}`)
-            .setColor(caso.estado === 'activo' ? 0xE74C3C : 0x5865F2)
+            .setColor(0xB30609)
             .addFields(
                 { name: 'Usuario', value: `${caso.usuarioNombre || 'Desconocido'} (\`${caso.usuarioId}\`)`, inline: false },
                 { name: 'Tipo', value: caso.tipo, inline: true },
@@ -1697,7 +1697,7 @@ require('dotenv').config();
                 } catch (e) { return responder({ content: `❌ ${e.message}`, ephemeral: esSlash }); }
             }
             const token = crypto.randomUUID();
-            const embed = new EmbedBuilder().setTitle('Confirmar sanción').setColor(0xE67E22).setDescription(`**Usuario:** <@${datos.usuario.id}>\n**Motivo:** ${motivo.trim()}\n**Duración:** ${duracionLegible(ms)}\n\nSi supera 28 días, se aplicará un ban temporal que el bot intentará retirar al vencer.\nEsta operación expira en 60 segundos.`);
+            const embed = new EmbedBuilder().setTitle('Confirmar sanción').setColor(0xB30609).setDescription(`**Usuario:** <@${datos.usuario.id}>\n**Motivo:** ${motivo.trim()}\n**Duración:** ${duracionLegible(ms)}\n\nSi supera 28 días, se aplicará un ban temporal que el bot intentará retirar al vencer.\nEsta operación expira en 60 segundos.`);
             confirmacionesModeracion.set(token, { actorId: user.id, guildId: guild.id, usuarioId: datos.usuario.id, tipo: 'sancion', motivo: motivo.trim(), duracionMs: ms, expira: Date.now()+60000, usado: false });
             const fila = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId(`modconfirm:${token}`).setLabel('Confirmar').setStyle(BTN_STYLE.DANGER),
@@ -1712,7 +1712,7 @@ require('dotenv').config();
                 new ButtonBuilder().setCustomId(`modconfirm:${token}`).setLabel('Confirmar').setStyle(BTN_STYLE.DANGER),
                 new ButtonBuilder().setCustomId(`modcancel:${token}`).setLabel('Cancelar').setStyle(BTN_STYLE.SECONDARY)
             );
-            return responder({ embeds: [new EmbedBuilder().setTitle('Confirmar ban').setColor(0xE74C3C).setDescription(`**Usuario:** <@${datos.usuario.id}>\n**Motivo:** ${motivo.trim()}\n**Duración:** Permanente\n\nEsta operación expira en 60 segundos.`)], components: [fila], ephemeral: esSlash });
+            return responder({ embeds: [new EmbedBuilder().setTitle('Confirmar ban').setColor(0xB30609).setDescription(`**Usuario:** <@${datos.usuario.id}>\n**Motivo:** ${motivo.trim()}\n**Duración:** Permanente\n\nEsta operación expira en 60 segundos.`)], components: [fila], ephemeral: esSlash });
         }
         if (nombre === 'kick') {
             try {
@@ -2911,7 +2911,7 @@ require('dotenv').config();
     
                 const registroEmbed = new EmbedBuilder()
                     .setTitle(`📋 Registro Middleman: ${resultado}`)
-                    .setColor(resultado === 'Positivo' ? 0x2ECC71 : 0xE74C3C)
+                    .setColor(0xB30609)
                     .addFields(
                         { name: '🎫 Ticket', value: `<#${ticket.id}>`, inline: false },
                         { name: '👤 Involucrado 1 (creador del ticket)', value: `${creador} (\`${creador.id}\`)`, inline: true },
@@ -2976,7 +2976,7 @@ require('dotenv').config();
     
                 const embedPanel = new EmbedBuilder()
                     .setTitle('🤝 Servicio Oficial de Middleman')
-                    .setColor(colorPanel)
+                    .setColor(0xB30609)
                     .setImage(GIF_PANEL_MIDDLEMAN)
                     .setDescription(
                         '¿Quieres hacer tus trades, ventas, pvps, confiables pero no sabes como?, pues nosotros tenemos un equipo de intermediarios que te ayudará en todo lo necesario para que tus trades, ventas y pvps sean 100% legales. Están 100% recomendados por la comunidad. Los intermediarios, más conocidos como middleman, estarán siempre disponibles cuando necesites ayuda.\n\n' +
@@ -3035,7 +3035,7 @@ require('dotenv').config();
     
                 const embedSoporte = new EmbedBuilder()
                     .setTitle('🛠️ Centro de Soporte y Atención')
-                    .setColor(colorPanel)
+                    .setColor(0xB30609)
                     .setImage(GIF_PANEL_SOPORTE)
                     .setDescription(
                         '¡Hola! ¿Te gustaría solucionar algún problema, resolver alguna pregunta o reportar algo? Te invito a abrir un ticket de soporte para que nuestro equipo de staff te ayude.\n\n' +
@@ -3217,7 +3217,7 @@ require('dotenv').config();
                             channel.name +
                             ' (Cierre Forzado)'
                         )
-                        .setColor(0xE74C3C)
+                        .setColor(0xB30609)
                         .addFields(
     
                             {
@@ -3307,11 +3307,7 @@ require('dotenv').config();
                 const embedRuleta =
                     new EmbedBuilder()
                         .setTitle('🎰 Ruleta del Perdón')
-                        .setColor(
-                            esPerdonado
-                                ? 0x2ECC71
-                                : 0xE74C3C
-                        )
+                        .setColor(0xB30609)
                         .setDescription(
                             '**Juzgando a:** ' +
                             '<@' +
@@ -3486,7 +3482,7 @@ require('dotenv').config();
                             origen +
                             ')'
                         )
-                        .setColor("#BF00FF")
+                        .setColor(0xB30609)
                         .setDescription(
                             '**<a:arrow_blue:1563954308637007934> Cliente:** <@' +
                             user.id +
@@ -3591,7 +3587,7 @@ require('dotenv').config();
                             '⭐ Historial Global de Reseñas - ' +
                             usuario.username
                         )
-                        .setColor(0xBF00FF)
+                        .setColor(0xB30609)
                         .setThumbnail(
                             usuario.displayAvatarURL({
                                 dynamic: true
@@ -3726,7 +3722,7 @@ require('dotenv').config();
                         .setTitle(
                             '<a:lightbluepasdasrd:1570855097292820632> Top 10 Mejores Reseñados y Puntuaciones'
                         )
-                        .setColor(0xBF00FF)
+                        .setColor(0xB30609)
                         .setDescription(
                             descripcionTop
                         )
@@ -4258,7 +4254,7 @@ require('dotenv').config();
                             .setTitle(
                                 '🎟️ Ticket de MIDDLEMAN'
                             )
-                            .setColor(0x2ECC71)
+                            .setColor(0xB30609)
                             .setDescription(
                                 '<@' +
                                 user.id +
@@ -4484,7 +4480,7 @@ require('dotenv').config();
                                 ' ' +
                                 info.titulo
                             )
-                            .setColor(info.color)
+                            .setColor(0xB30609)
                             .setDescription(
                                 '<@' +
                                 user.id +
@@ -5028,7 +5024,7 @@ require('dotenv').config();
                             '📋 Log - ' +
                             channel.name
                         )
-                        .setColor(0x2ECC71)
+                        .setColor(0xB30609)
                         .addFields(
     
                             {
