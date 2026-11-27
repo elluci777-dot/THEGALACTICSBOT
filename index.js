@@ -135,31 +135,47 @@ require('dotenv').config();
     }
 
     function embedCodigo(codigo) {
-        const iniciado = codigo.estado === 'activo';
+        const completadas = (codigo.palabras || []).filter(p => String(p || '').trim()).length;
         return new EmbedBuilder()
-            .setColor(iniciado ? 0x2ECC71 : 0xF1C40F)
-            .setTitle('🔐 Código por partes')
-            .setDescription(
-                `**Organizador:** <@${codigo.creadorId}>\n` +
-                `**Canal:** <#${codigo.canalId}>\n` +
-                `**Partes:** ${codigo.palabras.length}\n\n` +
-                (iniciado
-                    ? 'El código ya está en marcha. Une todas las palabras y envía la frase completa.'
-                    : 'Pulsa **Iniciar código** para comenzar. El bot enviará una palabra cada 3 segundos.')
-            )
-            .setFooter({ text: `The Galactics • Código ${codigo.id}` })
-            .setTimestamp(new Date(codigo.creado));
+            .setColor(0x9B59B6)
+            .setTitle('🔐 Crear código')
+            .setDescription(`Configura las **${codigo.palabras.length} partes** de tu código.\n\n**Completadas:** ${completadas}/${codigo.palabras.length}\nSelecciona cada parte para escribir su contenido.`)
+            .setFooter({ text: 'The Galactics • Configuración de código' });
     }
 
-    function filaIniciarCodigo(codigo) {
-        return new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId(`codigo:iniciar:${codigo.id}`)
-                .setLabel('Iniciar código')
-                .setEmoji('▶️')
-                .setStyle(3)
-                .setDisabled(codigo.estado !== 'pendiente')
-        );
+    function componentesEditorCodigo(codigo) {
+        const menu = new StringSelectMenuBuilder()
+            .setCustomId(`codigo:parte:${codigo.id}`)
+            .setPlaceholder('Selecciona una parte para editar')
+            .addOptions(codigo.palabras.map((palabra, i) => ({
+                label: `Parte ${i + 1}`,
+                description: palabra ? 'Completada • Pulsa para editar' : 'Pendiente de completar',
+                value: String(i + 1),
+                emoji: palabra ? '✅' : '✏️'
+            })));
+        const filas = [new ActionRowBuilder().addComponents(menu)];
+        const completo = codigo.palabras.every(p => String(p || '').trim());
+        if (completo) {
+            filas.push(new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`codigo:iniciar:${codigo.id}`).setLabel('Iniciar').setEmoji('▶️').setStyle(3),
+                new ButtonBuilder().setCustomId(`codigo:cancelar:${codigo.id}`).setLabel('Cancelar').setEmoji('✖️').setStyle(4)
+            ));
+        }
+        return filas;
+    }
+
+    function modalParteCodigo(codigo, indice) {
+        return new ModalBuilder()
+            .setCustomId(`codigo:modal:${codigo.id}:${indice}`)
+            .setTitle(`Configurar parte ${indice + 1}`)
+            .addComponents(new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                    .setCustomId('palabra')
+                    .setLabel(`Contenido de la parte ${indice + 1}`)
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true)
+                    .setMaxLength(50)
+            ));
     }
 
     async function enviarSiguienteParteCodigo(codigo) {
@@ -2617,19 +2633,19 @@ require('dotenv').config();
                         name: 'codigo',
                         description: 'Crear un código que se revela palabra por palabra',
                         options: [
-                            { name: 'cantidad_palabras', description: 'Cantidad de palabras del código (2 a 10)', type: ApplicationCommandOptionType.Integer, required: true, min_value: 2, max_value: 10 },
-                            { name: 'palabra_1', description: 'Primera palabra', type: ApplicationCommandOptionType.String, required: true, max_length: 50 },
-                            { name: 'palabra_2', description: 'Segunda palabra', type: ApplicationCommandOptionType.String, required: true, max_length: 50 },
-                            { name: 'palabra_3', description: 'Tercera palabra', type: ApplicationCommandOptionType.String, required: false, max_length: 50 },
-                            { name: 'palabra_4', description: 'Cuarta palabra', type: ApplicationCommandOptionType.String, required: false, max_length: 50 },
-                            { name: 'palabra_5', description: 'Quinta palabra', type: ApplicationCommandOptionType.String, required: false, max_length: 50 },
-                            { name: 'palabra_6', description: 'Sexta palabra', type: ApplicationCommandOptionType.String, required: false, max_length: 50 },
-                            { name: 'palabra_7', description: 'Séptima palabra', type: ApplicationCommandOptionType.String, required: false, max_length: 50 },
-                            { name: 'palabra_8', description: 'Octava palabra', type: ApplicationCommandOptionType.String, required: false, max_length: 50 },
-                            { name: 'palabra_9', description: 'Novena palabra', type: ApplicationCommandOptionType.String, required: false, max_length: 50 },
-                            { name: 'palabra_10', description: 'Décima palabra', type: ApplicationCommandOptionType.String, required: false, max_length: 50 }
+                            { name: 'cantidad_palabras', description: 'Cantidad de partes del código (1 a 10)', type: ApplicationCommandOptionType.Integer, required: true, min_value: 1, max_value: 10 }
                         ]
                     }]},
+                {
+                    name: 'delete',
+                    description: 'Eliminar códigos guardados',
+                    default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+                    options: [{
+                        type: ApplicationCommandOptionType.Subcommand,
+                        name: 'code',
+                        description: 'Eliminar todos los códigos guardados'
+                    }]
+                },
                 ...definicionesComandosModeracion()
     
             ]);
@@ -2663,24 +2679,8 @@ require('dotenv').config();
             tgManagerCommandUsage[commandName] = (tgManagerCommandUsage[commandName] || 0) + 1;
             if (commandName === 'crear' && interaction.options.getSubcommand() === 'codigo') {
                 const cantidad = interaction.options.getInteger('cantidad_palabras', true);
-                const palabras = [];
-                for (let i = 1; i <= cantidad; i++) {
-                    const palabra = interaction.options.getString(`palabra_${i}`);
-                    if (!palabra || !palabra.trim() || /\s/.test(palabra.trim())) {
-                        return interaction.reply({ content: `❌ Debes completar **palabra_${i}** con una sola palabra, sin espacios.`, ephemeral: true });
-                    }
-                    palabras.push(palabra.trim());
-                }
-                for (let i = cantidad + 1; i <= 10; i++) {
-                    if (interaction.options.getString(`palabra_${i}`)) {
-                        return interaction.reply({ content: `❌ Seleccionaste ${cantidad} palabras, así que no debes completar **palabra_${i}** ni las siguientes.`, ephemeral: true });
-                    }
-                }
-                if (palabras.some(p => p.length > 50)) {
-                    return interaction.reply({ content: '❌ Cada palabra puede tener como máximo 50 caracteres.', ephemeral: true });
-                }
                 const canalDestino = interaction.channel;
-                if (!canalDestino || !canalDestino.isTextBased() || !canalDestino.send || !interaction.guild) {
+                if (!canalDestino || !canalDestino.isTextBased() || !interaction.guild) {
                     return interaction.reply({ content: '❌ Usa este comando dentro de un canal de texto de un servidor.', ephemeral: true });
                 }
                 const codigoEnCanal = codigos.find(c =>
@@ -2689,16 +2689,14 @@ require('dotenv').config();
                     ['pendiente', 'activo'].includes(c.estado)
                 );
                 if (codigoEnCanal) {
-                    return interaction.reply({ content: '⚠️ Ya existe un código pendiente o activo en este canal. Termínalo antes de crear otro.', ephemeral: true });
+                    return interaction.reply({ content: '⚠️ Ya existe un código pendiente o activo en este canal.', ephemeral: true });
                 }
-
-                await interaction.deferReply({ ephemeral: true });
                 const codigo = {
                     id: require('crypto').randomUUID().slice(0, 10),
                     guildId: interaction.guildId,
                     canalId: canalDestino.id,
                     creadorId: interaction.user.id,
-                    palabras,
+                    palabras: Array(cantidad).fill(''),
                     estado: 'pendiente',
                     creado: Date.now(),
                     indice: 0,
@@ -2706,15 +2704,23 @@ require('dotenv').config();
                 };
                 codigos.push(codigo);
                 guardarCodigos();
+                return interaction.reply({
+                    embeds: [embedCodigo(codigo)],
+                    components: componentesEditorCodigo(codigo),
+                    ephemeral: true
+                });
+            }
 
-                try {
-                    await canalDestino.send({ content: '**Código preparado.** Pulsa **Iniciar código** cuando quieras comenzar.', components: [filaIniciarCodigo(codigo)] });
-                    return interaction.editReply(`✅ Código creado con **${cantidad} palabras**. Cuando estés listo, pulsa **Iniciar código** en el panel del canal.`);
-                } catch (error) {
-                    codigos = codigos.filter(c => c.id !== codigo.id);
-                    guardarCodigos();
-                    return interaction.editReply('❌ No pude publicar el panel. Revisa mis permisos en este canal.');
+            if (commandName === 'delete' && interaction.options.getSubcommand() === 'code') {
+                if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+                    return interaction.reply({ content: '❌ Necesitas permisos de administrador para borrar todos los códigos.', ephemeral: true });
                 }
+                for (const timer of temporizadoresCodigos.values()) clearTimeout(timer);
+                temporizadoresCodigos.clear();
+                const cantidadEliminada = codigos.length;
+                codigos = [];
+                guardarCodigos();
+                return interaction.reply({ content: `✅ Se eliminaron **${cantidadEliminada}** códigos guardados.`, ephemeral: true });
             }
 
             if (commandName === 'crear' && interaction.options.getSubcommand() === 'sorteo') {
@@ -3711,6 +3717,22 @@ require('dotenv').config();
             }
         }
     
+        if (interaction.isModalSubmit() && interaction.customId.startsWith('codigo:modal:')) {
+            const [, , codigoId, indiceTexto] = interaction.customId.split(':');
+            const codigo = codigos.find(c => c.id === codigoId);
+            if (!codigo || codigo.estado !== 'pendiente') return interaction.reply({ content: 'Este código ya no se puede editar.', ephemeral: true });
+            if (interaction.user.id !== codigo.creadorId) return interaction.reply({ content: 'Este panel no te pertenece.', ephemeral: true });
+            const indice = Number(indiceTexto);
+            const palabra = interaction.fields.getTextInputValue('palabra').trim();
+            if (!palabra || /\\s/.test(palabra)) return interaction.reply({ content: 'Escribe una sola palabra, sin espacios.', ephemeral: true });
+            codigo.palabras[indice] = palabra;
+            guardarCodigos();
+            return interaction.update({
+                embeds: [embedCodigo(codigo)],
+                components: componentesEditorCodigo(codigo)
+            });
+        }
+
         if (interaction.isModalSubmit() && interaction.customId.startsWith('postulacion:respuesta:')) {
             const rango = interaction.customId.split(':')[2];
             const respuesta = interaction.fields.getTextInputValue('respuesta').trim();
@@ -3734,6 +3756,16 @@ require('dotenv').config();
         // ========================================================
     
         if (interaction.isStringSelectMenu()) {
+            if (interaction.customId.startsWith('codigo:parte:')) {
+                const codigoId = interaction.customId.split(':')[2];
+                const codigo = codigos.find(c => c.id === codigoId);
+                if (!codigo || codigo.estado !== 'pendiente') return interaction.reply({ content: 'Este editor ya no está disponible.', ephemeral: true });
+                if (interaction.user.id !== codigo.creadorId) return interaction.reply({ content: 'Este panel no te pertenece.', ephemeral: true });
+                const indice = Number(interaction.values[0]) - 1;
+                if (!Number.isInteger(indice) || indice < 0 || indice >= codigo.palabras.length) return interaction.reply({ content: 'Parte no válida.', ephemeral: true });
+                return interaction.showModal(modalParteCodigo(codigo, indice));
+            }
+
             const customId = interaction.customId;
     
             if (customId === 'reglas_menu_publico' || customId === 'reglas_privado' ||
@@ -3796,21 +3828,28 @@ require('dotenv').config();
             const channel = interaction.channel;
             const member = interaction.member;
     
+            if (customId.startsWith('codigo:cancelar:')) {
+                const codigoId = customId.split(':')[2];
+                const codigo = codigos.find(c => c.id === codigoId);
+                if (!codigo) return interaction.update({ content: 'Este código ya no existe.', embeds: [], components: [] });
+                if (codigo.creadorId !== user.id) return interaction.reply({ content: 'Este panel no te pertenece.', ephemeral: true });
+                if (codigo.estado !== 'pendiente') return interaction.reply({ content: 'Este código ya no se puede cancelar.', ephemeral: true });
+                codigos = codigos.filter(c => c.id !== codigoId);
+                guardarCodigos();
+                return interaction.update({ content: '❌ Configuración del código cancelada.', embeds: [], components: [] });
+            }
+
             if (customId.startsWith('codigo:iniciar:')) {
                 const codigoId = customId.split(':')[2];
                 const codigo = codigos.find(c => c.id === codigoId);
                 if (!codigo) return interaction.reply({ content: 'Este código ya no está disponible.', ephemeral: true });
-                if (codigo.creadorId !== user.id) {
-                    return interaction.reply({ content: '❌ Solo quien creó este código puede iniciarlo.', ephemeral: true });
+                if (codigo.creadorId !== user.id) return interaction.reply({ content: 'Este panel no te pertenece.', ephemeral: true });
+                if (codigo.estado !== 'pendiente' || !codigo.palabras.every(p => String(p || '').trim())) {
+                    return interaction.reply({ content: 'Completa todas las partes antes de iniciar.', ephemeral: true });
                 }
-                if (codigo.estado !== 'pendiente') {
-                    return interaction.reply({ content: 'Este código ya fue iniciado o procesado.', ephemeral: true });
-                }
-                await interaction.update({
-                    content: '**El código es...**',
-                    embeds: [],
-                    components: []
-                });
+                await interaction.update({ content: '✅ Código iniciado.', embeds: [], components: [] });
+                const canalCodigo = await client.channels.fetch(codigo.canalId).catch(() => null);
+                if (canalCodigo?.isTextBased()) await canalCodigo.send('**El código es...**');
                 await iniciarCodigo(codigo);
                 return;
             }
