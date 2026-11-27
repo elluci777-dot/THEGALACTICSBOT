@@ -2683,13 +2683,26 @@ require('dotenv').config();
                 if (!canalDestino || !canalDestino.isTextBased() || !interaction.guild) {
                     return interaction.reply({ content: '❌ Usa este comando dentro de un canal de texto de un servidor.', ephemeral: true });
                 }
-                const codigoEnCanal = codigos.find(c =>
+                // Limpia configuraciones pendientes antiguas del canal para evitar que
+                // un editor abandonado bloquee la creación de un código nuevo.
+                const pendientesAntiguos = codigos.filter(c =>
                     c.guildId === interaction.guildId &&
                     c.canalId === canalDestino.id &&
-                    ['pendiente', 'activo'].includes(c.estado)
+                    c.estado === 'pendiente'
                 );
-                if (codigoEnCanal) {
-                    return interaction.reply({ content: '⚠️ Ya existe un código pendiente o activo en este canal.', ephemeral: true });
+                if (pendientesAntiguos.length) {
+                    const idsPendientes = new Set(pendientesAntiguos.map(c => c.id));
+                    codigos = codigos.filter(c => !idsPendientes.has(c.id));
+                    guardarCodigos();
+                }
+
+                const codigoActivo = codigos.find(c =>
+                    c.guildId === interaction.guildId &&
+                    c.canalId === canalDestino.id &&
+                    c.estado === 'activo'
+                );
+                if (codigoActivo) {
+                    return interaction.reply({ content: '⚠️ Ya hay un código en curso en este canal. Espera a que termine antes de crear otro.', ephemeral: true });
                 }
                 const codigo = {
                     id: require('crypto').randomUUID().slice(0, 10),
